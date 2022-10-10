@@ -36,14 +36,24 @@ Este informe se usara con un lenguaje de programación Python usando las siguien
 ```{python librerias}
 import pandas as pd
 import numpy as np
+import requests
+from io import StringIO
 ```
 
 
 # Depuración 
 
 ```{python}
-df= pd.read_csv("loan_data_2007_2014.csv")
+url_="https://drive.google.com/file/d/1oAIl7mq8LxAjY2Jk1q5OIWP9IDi0De28/view"
+file_id=url_.split('/')[-2]
+dwn_url='https://drive.google.com/uc?id=' + file_id
+df = pd.read_csv(dwn_url)
+
+
 ```
+
+
+
 
 
 La base de datos <a href="https://drive.google.com/file/d/1xaF743cmUgI5kc76I86AeZDE84SMkMnt/view"> loan_data_2007_2014.csv </a> cuenta con 74 columnas y 466285 registros.
