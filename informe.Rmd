@@ -1,0 +1,87 @@
+---
+title: "informe"
+author: "Germán alonso"
+date: "2022-10-10"
+output: 
+  html_document:
+    code_folding: hide
+    theme: readable
+    toc: true
+    toc_depth: 2
+---
+
+
+# Introducción
+
+El riesgo de crédito se refiere a la probabilidad de pérdida debido a un incumplimiento en los pagos de cualquier tipo de deuda, se cuenta con una base de datos <a href="https://drive.google.com/file/d/1xaF743cmUgI5kc76I86AeZDE84SMkMnt/view"> loan_data_2007_2014.csv </a> con información de usuarios desde 2007 a 2014 disponible en <a href ="https://www.kaggle.com/datasets/devanshi23/loan-data-2007-2014"> kaggle </a> su fuente es de <a href="https://www.lendingclub.com/" > lendingclub </a> que es un tipo de prestamista P2P (prestamos digitales) de EE. UU. contiene información reciente de interés como el estado del prestamo y varios factores que pueden influir en si la persona paga o no el prestamo.
+
+
+# Objetivo
+
+Crear un modelo de probabilidad para el incumplimiento de los pagos con la base de datos, para predecir la probabilidad de que un individuo incumpla sus obligaciones financieras en los siguientes 12 meses desde que se genero el crédito.
+
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Este informe se usara con un lenguaje de programación Python usando las siguientes librerias:
+
+- pandas: Lectura y manejo de data frame.
+- numpy: Arreglos matriciales.
+
+
+```{python librerias}
+import pandas as pd
+import numpy as np
+```
+
+
+# Depuración 
+
+```{python}
+df= pd.read_csv("loan_data_2007_2014.csv")
+```
+
+
+La base de datos <a href="https://drive.google.com/file/d/1xaF743cmUgI5kc76I86AeZDE84SMkMnt/view"> loan_data_2007_2014.csv </a> cuenta con 74 columnas y 466285 registros.
+
+- Las columnas id, member_id, url,title hacen referencia a información de idintificación del usuario, que no es de interés para el estudio.
+
+```{python}
+total_na=df.isna().sum()
+filtro=total_na< df.shape[0]*0.2
+total_na[filtro]
+```
+
+
+-
+```{python}
+
+```
+
+
+# Analisis Descriptivo
+
+
+
+## Contexto
+
+
+
+
+
+
+- loan_status es la variable de interés, cuenta 
+
+## Analisis
+
+
+
+
+```{python}
+
+```
+
