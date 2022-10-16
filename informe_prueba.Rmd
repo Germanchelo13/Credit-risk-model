@@ -20,7 +20,7 @@ output:
 
 ```
 
-```{css, echo = F}
+```{css echo=FALSE, language="css"}
 h1  {
   text-align: center;
   color: navy;
@@ -50,13 +50,13 @@ caption::before {
 }
 ```
 
-```{r,include=FALSE}
+```{r include=FALSE}
 #  background-color: #EEF6F9;
 ```
 
 #  Introducción 
 
- 
+
 
 El riesgo de crédito se refiere a la probabilidad de pérdida debido a un incumplimiento en los pagos de cualquier tipo de deuda, se cuenta con una base de datos <a href="https://drive.google.com/file/d/1xaF743cmUgI5kc76I86AeZDE84SMkMnt/view"> loan_data_2007_2014.csv </a> con información de usuarios desde 2007 a 2014 disponible en <a href ="https://www.kaggle.com/datasets/devanshi23/loan-data-2007-2014"> kaggle </a> su fuente es de <a href="https://www.lendingclub.com/" > lendingclub </a> que es un tipo de prestamista P2P (prestamos digitales) de EE. UU. contiene información reciente de interés como el estado del prestamo y varios factores que pueden influir en si la persona paga o no el prestamo.
 
@@ -88,22 +88,35 @@ import seaborn as sns
 from scipy.stats import chi2_contingency
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import accuracy_score
+from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
 mes_name=['Dec', 'Nov', 'Oct', 'Sep', 'Aug', 'Jul', 'Jun', 'May', 'Apr', 'Mar', 'Feb', 'Jan']
 mes_num=list(pd.Series(list((13-np.arange(1,13)))).astype("str"))
 def format_replace(string_):
     for i in range(0,12):
         string_=str(string_).replace(mes_name[i],mes_num[i] )
     return string_
+def dummy_creation(df_, columns_list):
+    df_dummies = []
+    for col in columns_list:
+        df_dummies.append(pd.get_dummies(df_[col], prefix = col, prefix_sep = ':'))
+    df_dummies = pd.concat(df_dummies, axis = 1)
+    df_ = pd.concat([df_, df_dummies], axis = 1)
+    df_=df_.drop(labels=columns_list,axis=1)
+    return df_
+
 ```
 
 # Depuración
 
-```{python,message=FALSE}
+```{python message=FALSE}
 df=pd.read_csv("loan_data_2007_2014.csv")
 ```
-```{python,include=FALSE}
+```{python include=FALSE}
 df[ 'issue_d']=df[ 'issue_d'].apply(format_replace)
 df['last_pymnt_d']=df['last_pymnt_d'].apply(format_replace)
+df[ 'earliest_cr_line']=df[ 'earliest_cr_line'].apply(format_replace)
+df['earliest_cr_line']=pd.to_datetime(df['earliest_cr_line'], format = "%m-%y")
 ```
 
 La base de datos <a href="https://drive.google.com/file/d/1xaF743cmUgI5kc76I86AeZDE84SMkMnt/view"> loan_data_2007_2014.csv </a> cuenta con 74 columnas y 466285 registros.
@@ -132,7 +145,7 @@ Se crea las variables.
 
 - __good_status__: Que tomara valores 0 (con morosidad) y 1 (Sin morosidad)
 
-```{python,results="asis"}
+```{python results="asis"}
 table_frec=pd.DataFrame(df["loan_status"].value_counts())
 status_mora=['Charged Off', 'Default', 'Late (31-120 days)','Does not meet the credit policy. Status:Charged Off']
 table_frec["good_status"]=1
@@ -153,10 +166,11 @@ df.loc[df["loan_status"].isin(status_mora),"good_status"]=0
 
 - __month_last__: last_pymnt_d-issue_d en meses.
 
-```{python,warning=FALSE}
+```{python warning=FALSE}
 df[ 'issue_d']=pd.to_datetime(df['issue_d'], format = "%m-%y")
 df['last_pymnt_d']=pd.to_datetime(df['last_pymnt_d'], format = "%m-%y")
 df["month_last"]= ((df.last_pymnt_d - df.issue_d)/np.timedelta64(1, 'M'))
+
 ```
 
 
@@ -184,7 +198,7 @@ Donde __month_last__ define el tiempo en que queremos predecir, $X$ es un vector
 Asumiendo que se tolera al menos un 20 % de valores NA en los datos de las y omitiendo las columnas de identificación se cuenta con:
 
 
-```{python , results="asis"}
+```{python results="asis"}
 drop_columns=["id", "member_id", "url", "title"]
 df=df.drop(labels=drop_columns,axis=1 )
 total_na=df.isna().sum()
@@ -204,7 +218,7 @@ Se omiten 22 variables por su alto porcentaje de valores faltantes, aunque 20% d
 ## Variables modelo
 
 
-```{python,results='asis'}
+```{python results="asis"}
 vars_=total_na.sort_values(ascending=False).head()
 result=pd.DataFrame({"Variables":vars_.index,"Descripción":[" Total crédito rotativo alto entre límite de crédito. ","Saldo corriente en todas las cuentas ", " Montos totales de cobro adeudados. ", "Tipo de trabajo.","Años en el trabajo "   ], "Total NA":vars_ })
 result=result.reset_index()
@@ -218,7 +232,7 @@ De estas variables puede ser dificil que el usuario obtenga __total_rev_hi_lim__
 Es importante identificar que variables puede dar un usuario al momento del registro, pues existen variables donde se obtienen la información al pasar el tiempo o un usuario no puede identificar.
 
 
-```{python, include=FALSE}
+```{python include=FALSE}
 variables_eliminar="""funded_amnt_inv
 grade
 sub_grade
@@ -261,7 +275,7 @@ Las variables en la tabla no se tienen en cuenta porque son medidas que son prop
 
 
 
-```{python,include=FALSE}
+```{python include=FALSE}
 variables="""__loan_amnt__:El monto indicado del préstamo solicitado por el prestatario. Si en algún momento, el departamento de crédito reduce el monto del préstamo, entonces se reflejará en este valor.
 
 __funded_amnt__: El monto total comprometido con ese préstamo en ese momento.
@@ -308,9 +322,10 @@ result=pd.DataFrame({"Variables": variables_, "Descripción":descripcion_ })
 En esta tabla se tienen las posibles variables para el modelo, con __good_status__ y __target_time__.
 
 
-```{python,results='asis'}
+```{python results="asis"}
 variables_=pd.Series(variables_).apply(lambda x: x.replace("__","" ))
-df=df[ [*variables_, "good_status","target_time" ]] 
+df["month_earliest_cr_line"]=((df.earliest_cr_line - df.issue_d)/np.timedelta64(1, 'M'))
+df=df[ [*variables_, "good_status","target_time","month_earliest_cr_line" ]] 
 df=df[~df.isna().any(axis=1)]
 result=pd.DataFrame({"":["Filas", "Columnas"] ,"Cantidad":df.shape})
 #print_table(result, "Dimensiones")
@@ -341,12 +356,12 @@ table_final=pd.DataFrame({"good status":[1,0],"Frecuencia":tabla_2,
 
 
 
-La variable __acc_now_delinq__ se puede transformar en 1 si tiene al menos una cuenta en mora, 0 sino tiene cunetas en mora. También la variable __pub_rec__ se transforma 1 si tiene al menos un derogatory public records, 0 sino. Se tomo la decisión ya que son variables conteos donde no parece ser necesario.
+La variable __acc_now_delinq__ se puede transformar en 1 si tiene al menos una cuenta en mora, 0 sino tiene cunetas en mora. También la variable __pub_rec__ se transforma 1 si tiene al menos un derogatory public records, 0 sino. Se tomo la decisión ya que son variables conteos donde no parece ser necesario. Como esta es la fecha en que se hizo su primer prestamo __earliest_cr_line__, se debe calcular los meses que han pasado desde que solicito el prestamo __month_earliest_cr_line__
 
 
 ```{python}
+df=df.drop(labels="earliest_cr_line",axis=1)
 df["acc_now_delinq"]=np.where(df["acc_now_delinq"]>0, 1,0)
-
 df["pub_rec"]=np.where(df["pub_rec"]>0,1,0)
 ```
 
@@ -379,18 +394,99 @@ chi2_result.sort_values(by = ['p-value'], ascending = True, ignore_index = True,
 
 `r kbl(py$chi2_result, escape = F, align = "c", caption="Prueba ",row.names=F,digits =2) %>%  kable_classic_2("striped", full_width = F)`
 
-Se realiza pruebas $\chi^2$ para las variables categoricas en contraste con la variable __good_status__ y se observa 6 variables con un p-valor pequeño, esto significa que estas variables pueden influir en el incumplimiento de las finanzas. Se excluye __pymnt_plan__ debido a un p-valor > 0.05.
+Se realiza pruebas $\chi^2$ para las variables categoricas en contraste con la variable __good_status__ y se observa 8 variables con un p-valor pequeño, esto significa que estas variables pueden influir en el incumplimiento de las finanzas. Se excluye __pymnt_plan__ debido a un p-valor > 0.05.
 
 
-```{python, fig.cap="Correlación entre variables númericas."}
+```{python fig.cap="Correlación entre variables númericas."}
 corrmat = X_train_num.corr()
-# plt.figure(figsize=(10,10))
 sns.heatmap(corrmat)
 ```
 
 
 En la figura 1 se observa que hay 3 variables con una alta correlación entre si ($\approx$ 1) que son: __loan_amnt__, __funded_amnt__, __installment__ y según la table - 5 se opta por __loan_amnt__ por ser el prestamo definitivo que dio LC.
 
+```{python}
+vars_=['loan_amnt',  'int_rate', 'annual_inc',
+       'open_acc', 'tot_cur_bal',"month_earliest_cr_line"]
+fig, axs = plt.subplots(ncols=3,nrows=2,figsize=(15, 15))
+sns.boxplot(data=df, x="good_status", y=vars_[0], ax=axs[0, 0],showfliers = False)
+sns.boxplot(data=df, x="good_status", y=vars_[1], ax=axs[0, 1],showfliers = False)
+sns.boxplot(data=df, x="good_status", y=vars_[2], ax=axs[0, 2],showfliers = False)
+sns.boxplot(data=df, x="good_status", y=vars_[3], ax=axs[1, 1],showfliers = False)
+sns.boxplot(data=df, x="good_status", y=vars_[4], ax=axs[1, 2],showfliers = False)
+sns.boxplot(data=df, x="good_status", y=vars_[5], ax=axs[1, 0],showfliers = False)
+```
+En la figura se observa que las variables con una tendencia de influir en __good_status__ son __int_rate__, __annual_inc__ pues aunque no se observa gran diferencia, parece existir una influencia.
 
+Las variables a usar para crear el modelo son: 
 
+```{python}
+variables_final=list(chi2_result["Feature"].iloc[0:7])
+variables_final=[*variables_final,*["int_rate", "annual_inc","good_status" ]]
+```
 
+```{python}
+variables_final
+```
+
+# Modelos
+
+Se plantean diferentes modelos aplicando validación cruzada.
+
+## Partición de datos
+
+```{python}
+df_modelo=df[variables_final].copy()
+X = df_modelo.drop('good_status', axis = 1)
+y = df_modelo['good_status']
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, random_state = 42, stratify = y)
+X_train, X_test = X_train.copy(), X_test.copy()
+X_train=dummy_creation(X_train, ["term","emp_length","home_ownership","initial_list_status", "purpose" ])
+X_test=dummy_creation(X_test, ["term","emp_length","home_ownership","initial_list_status", "purpose" ])
+```
+
+```{python}
+X_train
+```
+
+## Modelo K-nn
+
+```{python tags=c()}
+score_train = []
+score_test=[]
+for i in range(1,20):
+    neigh = KNeighborsClassifier(n_neighbors=i)
+    neigh.fit(X_train, y_train)
+    score_train.append(accuracy_score(y_train, neigh.predict(X_train)))
+    score_test.append(accuracy_score(y_test, neigh.predict(X_test)))
+    # print(i)
+```
+
+```{python}
+
+```
+
+## Modelo logístico 
+
+```{python}
+
+```
+
+```{python}
+
+```
+
+```{python}
+
+```
+
+```{python}
+
+```
+
+de notebook a R markdwon 
+
+```{python}
+# import jupytext
+# !jupytext --to rmarkdown informe_prueba.ipynb
+```
