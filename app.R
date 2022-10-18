@@ -66,15 +66,15 @@ usuario<- fluidPage(
                                                      min = 6,
                                                      max = 26,
                                                      value = 10,
-                                                     step = 1,
-                                                     width = "100%") )
+                                                     step = 0.1,
+                                                     width = "100%") ),
+                                fluidRow( uiOutput("Predicion")  )
                               ))))
     )
     
     )
   )
 )
-summary(df$int_rate)
 
 
 
@@ -129,8 +129,19 @@ output$intro_<- renderUI({
   
   
 })
+output$Predicion<-renderUI({
+  predicciones <- predict(modelo_logistico, data.frame(target_time = input$target_time,
+                                                       pub_rec=input$pub_rec,
+                                                       loan_amnt=input$loan_amnt,
+                                                       int_rate =input$int_rate ,
+                                                       open_acc=input$open_acc,
+                                                       emp_length=input$emp_length),
+                          se.fit = TRUE)
+  predicciones_logit <- exp(predicciones$fit) / (1 + exp(predicciones$fit))
+  HTML(paste("El score es ",as.character(predicciones_logit),sep=" " ) )
+})
   
-  
+#write.csv(data.frame(modelo_logistico$coefficients),"coeficientes_logistico.csv", row.names = F )
 }
 
 shinyApp(
