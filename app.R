@@ -47,15 +47,34 @@ usuario<- fluidPage(
                                 fluidRow( column(6,selectInput(inputId="pub_rec",
                                                       label="Seleccione 1 si tiene derogatory public records,\n  0 sino",
                                                       choices=c(0,1),multiple=F)),
-                                          column(6,selectInput(inputId="open_acc", label="Selecione 1 si tiene ",
-                                                      choices=c(0,1) )) ) 
+                                          column(6,selectInput(inputId="open_acc", label="Selecione 1 si tiene mas \n de una linea de crédito, 0 sino",
+                                                      choices=c(0,1) )) ),
+                                fluidRow( column(6,selectInput(inputId ="home_ownership", label="Seleccione el estado \n de su vivienda",
+                                                      choices =unique(df$home_ownership)) ),
+                                          column(6,selectInput(inputId = "emp_length",
+                                                               label="Selecione cuantos años de trabajo lleva",
+                                                               choices = unique(df$emp_length)) )),
+                                fluidRow(sliderInput("loan_amnt",
+                                                     label = "Seleccione el monto del prestamo que va a solicitar",
+                                                     min = 1000,
+                                                     max = 35000,
+                                                     value = 1000,
+                                                     step = 250,
+                                                     width = "100%") ),
+                                fluidRow(sliderInput("int_rate",
+                                                     label = "Seleccione la tasa de interes del prestamo",
+                                                     min = 6,
+                                                     max = 26,
+                                                     value = 10,
+                                                     step = 1,
+                                                     width = "100%") )
                               ))))
     )
     
     )
   )
 )
-unique(df$open_acc)
+summary(df$int_rate)
 
 
 
