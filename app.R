@@ -7,15 +7,19 @@ library(plotly) # graficos
 library(shinydashboard)
 library(tidyverse)
 library(shinycssloaders)# to add a loader while graph is populating
-df=read.csv("datos_modelo.csv")
-modelo_logistico <- glm(good_status ~., data = df[,-1], family = "binomial")
-
+#df=read.csv("datos_modelo.csv")
+#modelo_logistico<-glm(good_status ~., data = df[,-1], family = "binomial")
+#saveRDS(modelo_logistico,"modelo.RDS" )
+modelo_logistico <-readRDS("modelo.RData")# glm(good_status ~., data = df[,-1], family = "binomial")
+emp_temp<-c("10+ years", "1 year"  ,  "2 years",   "4 years" ,  "3 years",   "7 years" ,  "5 years"   ,"6 years"  ,
+            "9 years"  , "8 years" ,  "< 1 year" 
+            )
 
 url_github<-"https://github.com/Germanchelo13/Credit-risk-model"
 usuario<- fluidPage(
   dashboardPage(
     # header princial
-    dashboardHeader(title="modelo riesgo de credito",
+    dashboardHeader(title="modelo riesgo de \n crédito",
                     # titleWidth = 400, 
                     tags$li(class="dropdown",
                             tags$a(href=url_github, 
@@ -27,7 +31,7 @@ usuario<- fluidPage(
       sidebarMenu(id="sidebar",
                   fluidRow(style='height:5vh'),
                   menuItem("Introduction", tabName="intro", icon=icon("users")),
-                  menuItem("Modelo riesgo de credito", tabName="data", icon=icon("database"))
+                  menuItem("Modelo riesgo de crédito", tabName="data", icon=icon("database"))
       )  ),
     # itmes
     dashboardBody(tabItems (
@@ -37,9 +41,7 @@ usuario<- fluidPage(
               tabBox(id='t3',width=12,tabPanel(HTML('<i class="fa-solid fa-book"></i> Contexto'), 
                                                fluidPage(
                                                  fluidRow(uiOutput('intro_'))
-                                               )),
-                     tabPanel(HTML('<i class="fa-solid fa-graduation-cap"></i> Caracterización'), fluidPage(fluidRow( 
-                       uiOutput('caracterizacion') ) ) ) )) ,
+                                               )) )) ,
       tabItem(tabName="data",
               tabBox(id="t3",width= 12,
                      tabPanel(title="Prediccion score",icon=icon('table'),
@@ -47,13 +49,18 @@ usuario<- fluidPage(
                                 fluidRow( column(6,selectInput(inputId="pub_rec",
                                                       label="Seleccione 1 si tiene derogatory public records,\n  0 sino",
                                                       choices=c(0,1),multiple=F)),
-                                          column(6,selectInput(inputId="open_acc", label="Selecione 1 si tiene mas \n de una linea de crédito, 0 sino",
-                                                      choices=c(0,1) )) ),
+                                          column(6,sliderInput(inputId="open_acc",
+                                                               label="Selecione El número de líneas de crédito abiertas.",
+                                                               min = 0,
+                                                               max=84,
+                                                               value=0,
+                                                               step=1,
+                                                               width = "100%")) ),
                                 fluidRow( column(6,selectInput(inputId ="home_ownership", label="Seleccione el estado \n de su vivienda",
-                                                      choices =unique(df$home_ownership)) ),
+                                                      choices =c("OWN","RENT","MORTGAGE","NONE","OTHER") ) ),
                                           column(6,selectInput(inputId = "emp_length",
                                                                label="Selecione cuantos años de trabajo lleva",
-                                                               choices = unique(df$emp_length)) )),
+                                                               choices = emp_temp) )),
                                 fluidRow(sliderInput("loan_amnt",
                                                      label = "Seleccione el monto del prestamo que va a solicitar",
                                                      min = 1000,
@@ -93,21 +100,12 @@ output$intro_<- renderUI({
     tags$br(),
     HTML(paste('&#9658',tags$a(href='https://www.linkedin.com/in/juan-pablo-buitrago-diaz-5b960922b/',icon("linkedin"), 'Juan Pablo Buitrago Diaz', target="_blank"), 'Estudiante de ingenieria en sistemas en la Universidad Nacional de Colombia.') ),
   )
-  print(members_)
   HTML("<h2 style='text-align:center' > Introducción <h2/>
   <h5>Les brindamos esta aplicacion que 
   permite de forma agil calcular el porccentaje de riesgo y el
   score crediticio a los usuarios del publico común<h5/>
-  <h2 style='text-align:center'> Objetivo <h2/>
-  <h5>Que el usuario tenga otra alternativa para encontrar una universidad que cumpla con sus espectativas y que se 
-  ubique en un lugar que sea acorde a sus necesidades.<h5/>
   <h2 style='text-align:center'> ¿A quién va dirigido? <h2/>
-<h5>  A personas interedas en buscar universidades que cumplan con sus expectativas, pueden observar
-  la descripción de los 4 grupos e identificar cuales son de su interés, luego pueden ver la 
-  ubicación geográfica de las universidades según los grupos y el estado donde más se sientan 
-  comodos, ya sea por que busquen una universidad que cumpla con sus espectativas pero no a 
-  una distancia tan lejana de donde residen, el usuario puede dar click en un punto del mapa y 
-  obtener la URL de la página principal de dicha universidad.<h5>
+<h5>  A usuarios que esten interesados en su historial crediticio.<h5>
 <h2 style='text-align:center'> Video promocional <h2/>
  <iframe width='560' height='315' style='text-align:center' 
  src='https://www.youtube.com/embed/CqstGgo_E4c'
@@ -130,18 +128,20 @@ output$intro_<- renderUI({
   
 })
 output$Predicion<-renderUI({
-  predicciones <- predict(modelo_logistico, data.frame(target_time = input$target_time,
-                                                       pub_rec=input$pub_rec,
-                                                       loan_amnt=input$loan_amnt,
-                                                       int_rate =input$int_rate ,
-                                                       open_acc=input$open_acc,
-                                                       emp_length=input$emp_length),
+  predicciones <- predict(modelo_logistico, data.frame(target_time =1,
+                                                       pub_rec=as.numeric(input$pub_rec),
+                                                       loan_amnt=c(input$loan_amnt),
+                                                       int_rate =c(input$int_rate) ,
+                                                       open_acc=c(input$open_acc),
+                                                       emp_length=c(input$emp_length),
+                                                       home_ownership=c(input$home_ownership)),
                           se.fit = TRUE)
   predicciones_logit <- exp(predicciones$fit) / (1 + exp(predicciones$fit))
-  HTML(paste("El score es ",as.character(predicciones_logit),sep=" " ) )
+  print(predicciones_logit)
+  HTML(paste("El usuario que cumple con estas caracteristicas tiene un score de ",as.character(predicciones_logit),sep=" " ) )
 })
   
-#write.csv(data.frame(modelo_logistico$coefficients),"coeficientes_logistico.csv", row.names = F )
+#  write.csv(data.frame(modelo_logistico$coefficients),"coeficientes_logistico.csv", row.names = T)
 }
 
 shinyApp(

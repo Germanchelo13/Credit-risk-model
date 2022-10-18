@@ -1,6 +1,6 @@
 ---
 title: "informe"
-author: "Germán Patiño \n David Andres Cano Gonzalez \n David Garcia Blandon \n Juan Pablo Buitrago Diaz"
+author: "Germán Patiño, \n David Andres Cano Gonzalez, \n David Garcia Blandon \n ,Juan Pablo Buitrago Diaz"
 date: "2022-10-10"
 output: 
   html_document:
@@ -44,11 +44,10 @@ caption::before {
     content:"Table - " counter(section);
 }
 ```
+
 #  Introducción 
 
-
-
-El riesgo de crédito se refiere a la probabilidad de pérdida debido a un incumplimiento en los pagos de cualquier tipo de deuda, se cuenta con una base de datos <a href="https://drive.google.com/file/d/1xaF743cmUgI5kc76I86AeZDE84SMkMnt/view"> loan_data_2007_2014.csv </a> con información de usuarios desde 2007 a 2014 disponible en <a href ="https://www.kaggle.com/datasets/devanshi23/loan-data-2007-2014"> kaggle </a> su fuente es de <a href="https://www.lendingclub.com/" > lendingclub </a> que es un tipo de prestamista P2P (prestamos digitales) de EE. UU. contiene información reciente de interés como el estado del prestamo y varios factores que pueden influir en si la persona paga o no el prestamo.
+Para esta segunda práctica nos encontrábamos frente a un problema de riesgo de crédito, el cual permite predecir mediante probabilidad la posibilidad de incurrir en una pérdida debido a un incumplimiento de un futuro crédito que se desee brindar. Para este ejercicio, se contó con la base de datos <a href="https://drive.google.com/file/d/1xaF743cmUgI5kc76I86AeZDE84SMkMnt/view"> loan_data_2007_2014.csv </a> obtenida a través de kaggle. Esta contiene información perteneciente a usuarios entre los años 2007 y 2014 de lendingclub, una empresa que realiza préstamos digitales en Estados Unidos ( <a href="https://www.lendingclub.com/" > lendingclub </a>). 
 
 
 
@@ -56,17 +55,15 @@ El riesgo de crédito se refiere a la probabilidad de pérdida debido a un incum
 
 
 
-Crear un modelo de probabilidad para el incumplimiento de los pagos con la base de datos, para predecir la probabilidad de que un individuo incumpla sus obligaciones financieras en los siguientes 12 meses desde que se genero el crédito.
+El objetivo principal de la práctica fue el de realizar un modelo de probabilidad el cual permitiese predecir la probabilidad de que un individuo incumpla sus obligaciones financieras en los siguientes 12 meses desde que se genere el crédito.
+
+También se debía representar este mismo modelo con un Scorecard, el cual es un valor numérico que sirve para medir la solvencia de un individuo. De igual forma se debía analizar qué variables hacen más riesgosa a una persona. Y finalmente, se debía desarrollar una aplicación web que le permitiera a los usuario ver su calificación de scorecard, de acuerdo a sus características, y cómo se encuentra respecto al resto de la población.
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(reticulate)
 library(kableExtra)
 ```
-Este informe se usara con un lenguaje de programación Python usando las siguientes librerias:
-
--   pandas: Lectura y manejo de data frame.
--   numpy: Arreglos matriciales.
 
 ```{python librerias}
 import pandas as pd
@@ -613,16 +610,10 @@ errores_logistico=pd.concat([pd.crosstab(y_train,predict_train_log ,margins=Fals
 Esto es menor al modelo de bayes, luego se deben analizar los tipos de errores en cada modelo.
 
 
-`r kbl(py$errores_logistico*100, escape = F, align = "c", caption="Tabla comparativa modelo logístico",row.names=F,digits =2) %>%  kable_classic_2("striped", full_width = F)`
+`r kbl(py$errores_logistico*100, escape = F, align = "c", caption="Tabla comparativa modelo logístico",digits =2) %>%  kable_classic_2("striped", full_width = F)`
 
 
-`r kbl(py$errores_bayes*100, escape = F, align = "c", caption="Tabla comparativa modelo Naive Bayes",row.names=F,digits =2) %>%  kable_classic_2("striped", full_width = F)`
+`r kbl(py$errores_bayes*100, escape = F, align = "c", caption="Tabla comparativa modelo Naive Bayes",digits =2) %>%  kable_classic_2("striped", full_width = F)`
 
 <!-- #endregion -->
 
-de notebook a R markdwon 
-
-```{python}
-#  import jupytext
-# !jupytext --to rmarkdown informe_prueba.ipynb
-```
