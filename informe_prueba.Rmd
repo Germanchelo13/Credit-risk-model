@@ -1,6 +1,6 @@
 ---
 title: "informe"
-author: "Germán alonso"
+author: "Germán Patiño \n David Andres Cano Gonzalez \n David Garcia Blandon \n Juan Pablo Buitrago Diaz"
 date: "2022-10-10"
 output: 
   html_document:
@@ -14,11 +14,6 @@ output:
     fig_height: 8
     fig_caption: true
 ---
-
-```{r}
-
-
-```
 
 ```{css echo=FALSE, language="css"}
 h1  {
@@ -49,11 +44,6 @@ caption::before {
     content:"Table - " counter(section);
 }
 ```
-
-```{r include=FALSE}
-#  background-color: #EEF6F9;
-```
-
 #  Introducción 
 
 
@@ -73,9 +63,6 @@ knitr::opts_chunk$set(echo = TRUE)
 library(reticulate)
 library(kableExtra)
 ```
-
-
-
 Este informe se usara con un lenguaje de programación Python usando las siguientes librerias:
 
 -   pandas: Lectura y manejo de data frame.
@@ -90,20 +77,52 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
+import plotly.express as px
+from sklearn.naive_bayes import GaussianNB
+from tqdm import tqdm
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
+from sklearn.decomposition import PCA
+from sklearn.linear_model import LogisticRegression
+```
+
+```{python}
 mes_name=['Dec', 'Nov', 'Oct', 'Sep', 'Aug', 'Jul', 'Jun', 'May', 'Apr', 'Mar', 'Feb', 'Jan']
 mes_num=list(pd.Series(list((13-np.arange(1,13)))).astype("str"))
-def format_replace(string_):
+def format_replace(string_): # ajust formato de fecha
     for i in range(0,12):
         string_=str(string_).replace(mes_name[i],mes_num[i] )
     return string_
-def dummy_creation(df_, columns_list):
+def dummy_creation(df_, columns_list): # creacion de variables dummy
     df_dummies = []
     for col in columns_list:
-        df_dummies.append(pd.get_dummies(df_[col], prefix = col, prefix_sep = ':'))
+        df_dummies.append(pd.get_dummies(df_[col], prefix = col, prefix_sep = ':',drop_first=True))
     df_dummies = pd.concat(df_dummies, axis = 1)
     df_ = pd.concat([df_, df_dummies], axis = 1)
     df_=df_.drop(labels=columns_list,axis=1)
     return df_
+def plot_barplot(df_temp, x, y,nrow,ncol,fig_temp,show_leg):
+    df1 = df_temp.groupby(x)[y].value_counts(normalize=True)
+    df1 = df1.mul(100)
+    df1 = df1.rename('percent').reset_index()
+    df_temp=df1[df1[y]==1].copy()
+    fig_temp.add_trace(go.Bar(x=df_temp[x],
+                y=df_temp["percent"],
+                name="1",
+                marker_color='rgb(55, 83, 109)',
+                              hovertext =(x,"percent" ),
+                              showlegend=show_leg
+                ), row=nrow,col=ncol)
+    df_temp=df1[df1[y]==0].copy()
+    fig_temp.add_trace(go.Bar(x=df_temp[x],
+                y=df_temp["percent"],
+                name="0",
+                marker_color='rgb(26, 118, 255)',
+                              hovertext =(x,"percent" ),
+                              showlegend=show_leg
+                ),row=nrow,col=ncol)
+    fig_temp.update_yaxes(range = [0,100])
+    return fig_temp
 
 ```
 
@@ -145,7 +164,8 @@ Se crea las variables.
 
 - __good_status__: Que tomara valores 0 (con morosidad) y 1 (Sin morosidad)
 
-```{python results="asis"}
+```{python }
+#results="asis"
 table_frec=pd.DataFrame(df["loan_status"].value_counts())
 status_mora=['Charged Off', 'Default', 'Late (31-120 days)','Does not meet the credit policy. Status:Charged Off']
 table_frec["good_status"]=1
@@ -198,7 +218,7 @@ Donde __month_last__ define el tiempo en que queremos predecir, $X$ es un vector
 Asumiendo que se tolera al menos un 20 % de valores NA en los datos de las y omitiendo las columnas de identificación se cuenta con:
 
 
-```{python results="asis"}
+```{python }
 drop_columns=["id", "member_id", "url", "title"]
 df=df.drop(labels=drop_columns,axis=1 )
 total_na=df.isna().sum()
@@ -218,7 +238,7 @@ Se omiten 22 variables por su alto porcentaje de valores faltantes, aunque 20% d
 ## Variables modelo
 
 
-```{python results="asis"}
+```{python }
 vars_=total_na.sort_values(ascending=False).head()
 result=pd.DataFrame({"Variables":vars_.index,"Descripción":[" Total crédito rotativo alto entre límite de crédito. ","Saldo corriente en todas las cuentas ", " Montos totales de cobro adeudados. ", "Tipo de trabajo.","Años en el trabajo "   ], "Total NA":vars_ })
 result=result.reset_index()
@@ -286,13 +306,9 @@ __int_rate__: tasa de interés del préstamo.
 
 __installment__:cuota El pago mensual adeudado por el prestatario si el préstamo se origina.
 
-__emp_length__: años trabajo
-
 __home_ownership__: El estado de propiedad de la vivienda proporcionado por el prestatario durante el registro. Nuestros valores son: ALQUILER, PROPIEDAD, HIPOTECA, OTRO.
 
 __annual_inc__: Los ingresos anuales autoinformados proporcionados por el prestatario durante el registro.
-
-__pymnt_plan__: indica si se a establecido un plan de pago.
 
 __earliest_cr_line__: El mes en que se abrió la primera línea de crédito reportada del prestatario.
 
@@ -300,14 +316,19 @@ __open_acc__: El número de líneas de crédito abiertas en el archivo de crédi
 
 __pub_rec__: numero de derogatory public records.
 
-__initial_list_status__: El estado inicial de listado del préstamo. Los valores posibles son – W, F
-
 __acc_now_delinq__:El número de cuentas en las que el prestatario está ahora en mora.
 
 __purpose__: Razón por la que se hace el prestamo.
 
 __tot_cur_bal__:Saldo corriente total de todas las cuentas
+
+__emp_length__: años trabajo
+
+__initial_list_status__: El estado inicial de listado del préstamo. Los valores posibles son – W, F
+
+__pymnt_plan__: indica si se a establecido un plan de pago.
 """.split("\n")
+
 #.replace("__","")
 variables=pd.Series(variables)
 variables_= variables[~(variables=="")].apply(lambda x: x.split(":")[0])
@@ -322,13 +343,12 @@ result=pd.DataFrame({"Variables": variables_, "Descripción":descripcion_ })
 En esta tabla se tienen las posibles variables para el modelo, con __good_status__ y __target_time__.
 
 
-```{python results="asis"}
+```{python}
 variables_=pd.Series(variables_).apply(lambda x: x.replace("__","" ))
-df["month_earliest_cr_line"]=((df.earliest_cr_line - df.issue_d)/np.timedelta64(1, 'M'))
+df["month_earliest_cr_line"]=((df.issue_d-df.earliest_cr_line )/np.timedelta64(1, 'M'))
 df=df[ [*variables_, "good_status","target_time","month_earliest_cr_line" ]] 
 df=df[~df.isna().any(axis=1)]
 result=pd.DataFrame({"":["Filas", "Columnas"] ,"Cantidad":df.shape})
-#print_table(result, "Dimensiones")
 ```
 
 `r kbl(py$result, escape = F, align = "l", caption="Dimensión de datos") %>%  kable_classic_2("striped", full_width = F)`
@@ -359,7 +379,7 @@ table_final=pd.DataFrame({"good status":[1,0],"Frecuencia":tabla_2,
 La variable __acc_now_delinq__ se puede transformar en 1 si tiene al menos una cuenta en mora, 0 sino tiene cunetas en mora. También la variable __pub_rec__ se transforma 1 si tiene al menos un derogatory public records, 0 sino. Se tomo la decisión ya que son variables conteos donde no parece ser necesario. Como esta es la fecha en que se hizo su primer prestamo __earliest_cr_line__, se debe calcular los meses que han pasado desde que solicito el prestamo __month_earliest_cr_line__
 
 
-```{python}
+```{python tags=c()}
 df=df.drop(labels="earliest_cr_line",axis=1)
 df["acc_now_delinq"]=np.where(df["acc_now_delinq"]>0, 1,0)
 df["pub_rec"]=np.where(df["pub_rec"]>0,1,0)
@@ -405,10 +425,10 @@ sns.heatmap(corrmat)
 
 En la figura 1 se observa que hay 3 variables con una alta correlación entre si ($\approx$ 1) que son: __loan_amnt__, __funded_amnt__, __installment__ y según la table - 5 se opta por __loan_amnt__ por ser el prestamo definitivo que dio LC.
 
-```{python}
+```{python fig.cap="Box plot comparativos dado good_status"}
 vars_=['loan_amnt',  'int_rate', 'annual_inc',
        'open_acc', 'tot_cur_bal',"month_earliest_cr_line"]
-fig, axs = plt.subplots(ncols=3,nrows=2,figsize=(15, 15))
+fig, axs = plt.subplots(ncols=3,nrows=2,figsize=(18, 7))
 sns.boxplot(data=df, x="good_status", y=vars_[0], ax=axs[0, 0],showfliers = False)
 sns.boxplot(data=df, x="good_status", y=vars_[1], ax=axs[0, 1],showfliers = False)
 sns.boxplot(data=df, x="good_status", y=vars_[2], ax=axs[0, 2],showfliers = False)
@@ -416,77 +436,193 @@ sns.boxplot(data=df, x="good_status", y=vars_[3], ax=axs[1, 1],showfliers = Fals
 sns.boxplot(data=df, x="good_status", y=vars_[4], ax=axs[1, 2],showfliers = False)
 sns.boxplot(data=df, x="good_status", y=vars_[5], ax=axs[1, 0],showfliers = False)
 ```
+
 En la figura se observa que las variables con una tendencia de influir en __good_status__ son __int_rate__, __annual_inc__ pues aunque no se observa gran diferencia, parece existir una influencia.
 
 Las variables a usar para crear el modelo son: 
 
 ```{python}
-variables_final=list(chi2_result["Feature"].iloc[0:7])
-variables_final=[*variables_final,*["int_rate", "annual_inc","good_status" ]]
+variables_final=list(chi2_result["Feature"].iloc[0:8])
+variables_final=[*variables_final,*vars_,"good_status"]
+result=np.array([*variables_final,""])
+result.shape=(4,4)
+result=pd.DataFrame(result)
+result.columns=[""]*4
+
 ```
 
-```{python}
-variables_final
+`r kbl(py$result, escape = F, align = "l", caption="Covariables del modelo",row.names=F,digits =2) %>%  kable_classic_2("striped", full_width = F)`
+
+Estas son las covariables que se tendrán en el modelo.
+
+```{python tags=c(),fig.caption="Bar plot comparativos"}
+df.loc[df["home_ownership"] == "ANY","home_ownership"] = 'NONE'
+var_cat=['term','pub_rec','home_ownership','initial_list_status','purpose','emp_length']
+fig_ = make_subplots(rows=4, cols=2,subplot_titles =var_cat)
+fig_ =plot_barplot(df, var_cat[0],"good_status", 1,1,fig_,True)
+fig_ =plot_barplot(df, var_cat[1],"good_status", 1,2,fig_, True)
+fig_ =plot_barplot(df, var_cat[2],"good_status", 2,1,fig_, True)
+fig_ =plot_barplot(df, var_cat[3],"good_status", 2,2,fig_, True)
+fig_ =plot_barplot(df, var_cat[4],"good_status", 3,1,fig_, True)
+fig_ =plot_barplot(df, var_cat[5],"good_status", 3,2,fig_, True)
+# fig_ =plot_barplot(df, var_cat[6],"good_status", 4,1,fig_, True)
+fig_.update_layout(
+    title="Good status",
+    xaxis_tickfont_size=14,
+    yaxis=dict(
+        title='Distribution percent ',
+        titlefont_size=16,
+        tickfont_size=14,
+    ),
+    legend=dict(
+        x=1,
+        y=1.0,
+        bgcolor='rgba(255, 255, 255, 0)',
+        bordercolor='rgba(255, 255, 255, 0)'
+    ),
+    barmode='group',
+    bargap=0.15, # gap between bars of adjacent location coordinates.
+    bargroupgap=0.1, # gap between bars of the same location coordinate.
+    height=1000, width=900
+    )
 ```
+
+<!-- #region tags=[] -->
+
+
+## ¿Cómo afectan las variables?
+
+* Cuando el número de pagos es $>$ 36 meses la probabilidad de incumplimiento es mayor, es decir, un usuario puede inclumir si tiene mas número de pagos al inicio del prestamo.
+
+* Si el usuario marca NONE o OTHER o RENT influye negativamente, es decir, aumenta la probabilidad de que incumpla sus obligaciones financieras.
+
+* Si el proposito del prestamo es small_business, house, weddlng aumenta la probabilidad de que incumpla sus obligaciones financieras.
+
+* A medida que el usuario tiene menor tiempo de trabajo, aumenta la probabilidad de que incumpla sus obligaciones financieras.
+
 
 # Modelos
 
-Se plantean diferentes modelos aplicando validación cruzada.
+Se plantean diferentes modelos aplicando validación cruzada 80\% prueba 20\% test. 
+
+Luego de ensayar modelos se encontro que el valor de probabilidad de cambio mas adecuado es 0.8, es decir, si la probabilidad >=0.8 __good_status__ 1, por el contrario 0.
 
 ## Partición de datos
+<!-- #endregion -->
 
 ```{python}
 df_modelo=df[variables_final].copy()
-X = df_modelo.drop('good_status', axis = 1)
-y = df_modelo['good_status']
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, random_state = 42, stratify = y)
+df_modelo.loc[df_modelo["home_ownership"] == "ANY","home_ownership"] = 'NONE'
+X = df_modelo.drop('good_status', axis = 1).copy()
+X=dummy_creation(X, ["term","home_ownership", "purpose",'initial_list_status','emp_length' ,"pymnt_plan"])
+y = df_modelo['good_status'].copy()
+# y= np.where(y==1,0,1)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, random_state = 421)#, stratify = y)
 X_train, X_test = X_train.copy(), X_test.copy()
-X_train=dummy_creation(X_train, ["term","emp_length","home_ownership","initial_list_status", "purpose" ])
-X_test=dummy_creation(X_test, ["term","emp_length","home_ownership","initial_list_status", "purpose" ])
+result=pd.DataFrame({"":["Filas", "Columnas"] ,"Trian":X_train.shape,"Test":X_test.shape })
 ```
 
-```{python}
-X_train
-```
+<!-- #region -->
+`r kbl(py$result, escape = F, align = "l", caption="Dimensiones partición",row.names=F,digits =2) %>%  kable_classic_2("striped", full_width = F)`
 
-## Modelo K-nn
+
+
+
+
+## Modelo Naive Bayes
+
+De las variables que se escogieron se probo eliminando variables y para el modelo las variables selecionadas son: __target_time__, __pub_rec__, __loan_amnt__, __int_rate__, __open_acc__, __home_ownership__.
 
 ```{python tags=c()}
-# score_train = []
-# score_test=[]
-# for i in range(1,20):
-#     neigh = KNeighborsClassifier(n_neighbors=i)
-#     neigh.fit(X_train, y_train)
-#     score_train.append(accuracy_score(y_train, neigh.predict(X_train)))
-#     score_test.append(accuracy_score(y_test, neigh.predict(X_test)))
-    # print(i)
+var_=[
+    'target_time', 
+      'pub_rec', 
+      'loan_amnt', 
+      'int_rate', 
+       'open_acc', 
+       'home_ownership:NONE', 'home_ownership:OTHER', 'home_ownership:OWN',
+       'home_ownership:RENT', 
+     ]
+X_train_pca=X_train[var_]
+# X_train_pca=PCA_5.transform(X_train)
+X_test_pca=X_test[var_]
+# X_test_pca=PCA_5.transform(X_test)
+clf = GaussianNB()
+clf.fit(X_train_pca, y_train)
+prop_=0.8
+predict_train_nb= clf.predict_proba(X_train_pca)[:,1]
+predict_test_nb= clf.predict_proba(X_test_pca)[:,1]
+predict_train_nb=np.where(predict_train_nb>=prop_,1,0  )
+predict_test_nb=np.where(predict_test_nb>=prop_,1,0  )
+tasa_acierto_1=accuracy_score(y_train, predict_train_nb)*100
+tasa_acierto_2=accuracy_score(y_test,predict_test_nb )*100
+result=pd.DataFrame({"Población":["Train", "Test"], "Aciertos": [tasa_acierto_1,tasa_acierto_2 ] })
+errores_bayes=pd.concat([pd.crosstab(y_train,predict_train_nb ,margins=False, normalize=True, colnames=["predicción"],  rownames=['Real']),
+           pd.crosstab(y_test,predict_test_nb , margins=False, normalize=True, colnames=["predicción"], rownames=['Real'])
+    ],axis=1,keys=["Train", "Test"])
+
 ```
 
-```{python}
+<!-- #region -->
+`r kbl(py$result, escape = F, align = "c", caption="Validación modelo Naive Bayes",row.names=F,digits =2) %>%  kable_classic_2("striped", full_width = F)`
 
-```
+Se observa una tasa de acierto homogenea entre los datos de prueba y entrenamiento.
+
 
 ## Modelo logístico 
 
-```{python}
-
-```
-
-```{python}
-
-```
+Para este modelo se encontraron las variables apropiadas:  __target_time__, __pub_rec__, __loan_amnt__, __int_rate__, __open_acc__, __home_ownership__, __emp_length__.
+<!-- #endregion -->
 
 ```{python}
-
+var_=[
+    'target_time', 
+      'pub_rec', 
+      'loan_amnt', 
+      'int_rate', 
+       'open_acc', 
+       'home_ownership:NONE', 'home_ownership:OTHER', 'home_ownership:OWN',
+       'home_ownership:RENT', 
+      'emp_length:10+ years', 'emp_length:2 years',
+       'emp_length:3 years', 'emp_length:4 years', 'emp_length:5 years',
+       'emp_length:6 years', 'emp_length:7 years', 'emp_length:8 years',
+       'emp_length:9 years', 'emp_length:< 1 year'
+     ]
+X_train_pca=X_train[var_]
+# X_train_pca=PCA_5.transform(X_train)
+X_test_pca=X_test[var_]
+# X_test_pca=PCA_5.transform(X_test)
+Modelo = LogisticRegression()#C=1e-09,class_weight="balanced",solver="sag")
+Modelo.fit(X_train_pca, y_train)
+prop_=0.8
+predict_train_log= Modelo.predict_proba(X_train_pca)[:,1]
+predict_test_log= Modelo.predict_proba(X_test_pca)[:,1]
+predict_train_log=np.where(predict_train_log>=prop_,1,0  )
+predict_test_log=np.where(predict_test_log>=prop_,1,0  )
+tasa_acierto_1=accuracy_score(y_train, predict_train_log)*100
+tasa_acierto_2=accuracy_score(y_test,predict_test_log )*100
+result=pd.DataFrame({"Población":["Train", "Test"], "Aciertos": [tasa_acierto_1,tasa_acierto_2 ] })
+errores_logistico=pd.concat([pd.crosstab(y_train,predict_train_log ,margins=False, normalize=True, colnames=["predicción"],  rownames=['Real']),
+           pd.crosstab(y_test,predict_test_log , margins=False, normalize=True, colnames=["predicción"], rownames=['Real'])
+    ],axis=1,keys=["Train", "Test"])
 ```
 
-```{python}
+<!-- #region -->
+`r kbl(py$result, escape = F, align = "c", caption="Validación modelo logístico",row.names=F,digits =2) %>%  kable_classic_2("striped", full_width = F)`
 
-```
+Esto es menor al modelo de bayes, luego se deben analizar los tipos de errores en cada modelo.
+
+
+`r kbl(py$errores_logistico*100, escape = F, align = "c", caption="Tabla comparativa modelo logístico",row.names=F,digits =2) %>%  kable_classic_2("striped", full_width = F)`
+
+
+`r kbl(py$errores_bayes*100, escape = F, align = "c", caption="Tabla comparativa modelo Naive Bayes",row.names=F,digits =2) %>%  kable_classic_2("striped", full_width = F)`
+
+<!-- #endregion -->
 
 de notebook a R markdwon 
 
 ```{python}
-# import jupytext
+#  import jupytext
 # !jupytext --to rmarkdown informe_prueba.ipynb
 ```
