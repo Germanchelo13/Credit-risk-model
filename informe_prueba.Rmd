@@ -120,6 +120,89 @@ def plot_barplot(df_temp, x, y,nrow,ncol,fig_temp,show_leg):
                 ),row=nrow,col=ncol)
     fig_temp.update_yaxes(range = [0,100])
     return fig_temp
+# function to calculate WoE and IV of categorical features
+# The function takes 3 arguments: a dataframe (X_train_prepr), a string (column name), and a dataframe (y_train_prepr).
+def woe_discrete(df, cat_variabe_name, y_df):
+    df = pd.concat([df[cat_variabe_name], y_df], axis = 1)
+    df = pd.concat([df.groupby(df.columns.values[0], as_index = False)[df.columns.values[1]].count(),
+                    df.groupby(df.columns.values[0], as_index = False)[df.columns.values[1]].mean()], axis = 1)
+    df = df.iloc[:, [0, 1, 3]]
+    df.columns = [df.columns.values[0], 'n_obs', 'prop_good']
+    df['prop_n_obs'] = df['n_obs'] / df['n_obs'].sum()
+    df['n_good'] = df['prop_good'] * df['n_obs']
+    df['n_bad'] = (1 - df['prop_good']) * df['n_obs']
+    df['prop_n_good'] = df['n_good'] / df['n_good'].sum()
+    df['prop_n_bad'] = df['n_bad'] / df['n_bad'].sum()
+    df['WoE'] = np.log(df['prop_n_good'] / df['prop_n_bad'])
+    df = df.sort_values(['WoE'])
+    df = df.reset_index(drop = True)
+    df['diff_prop_good'] = df['prop_good'].diff().abs()
+    df['diff_WoE'] = df['WoE'].diff().abs()
+    df['IV'] = (df['prop_n_good'] - df['prop_n_bad']) * df['WoE']
+    df['IV'] = df['IV'].sum()
+    return df
+
+'''
+function to calculate WoE & IV of continuous variables
+This is same as the function we defined earlier for discrete variables
+The only difference are the 2 commented lines of code in the function that results in the df
+being sorted by continuous variable values
+'''
+def continua_categorica(df_,variable,y_df ):
+    quantiles_=list(df_[variable].quantile([0.15,0.3,0.45,0.6,0.75,0.9]))
+    new_var=[variable+str(quantiles_[0])]
+    df_[variable+str(quantiles_[0])]=np.where(df_[variable]<quantiles_[0],1,0 )
+    for i in range(1,len(quantiles_)-1):
+        new_var.append(variable+str(quantiles_[i]))
+        df_[variable+str(quantiles_[i]) ]=np.where((df_[variable]<=quantiles_[i]) & (df_[variable]>quantiles_[i-1]),1,0 )    
+    df_[variable+str(quantiles_[5])]=np.where(df_[variable]>=quantiles_[5],1,0)
+    new_var.append(variable+str(quantiles_[5]) )
+    woes=[]
+    for vars_ in new_var:
+        woe_temp=[*list(woe_ordered_continuous(df_,vars_,y_df )["WoE"] ),vars_]
+        woes.append(woe_temp)
+    return woes
+    
+def woe_ordered_continuous(df, continuous_variabe_name, y_df):
+    df = pd.concat([df[continuous_variabe_name], y_df], axis = 1)
+    df = pd.concat([df.groupby(df.columns.values[0], as_index = False)[df.columns.values[1]].count(),
+                    df.groupby(df.columns.values[0], as_index = False)[df.columns.values[1]].mean()], axis = 1)
+    df = df.iloc[:, [0, 1, 3]]
+    df.columns = [df.columns.values[0], 'n_obs', 'prop_good']
+    df['prop_n_obs'] = df['n_obs'] / df['n_obs'].sum()
+    df['n_good'] = df['prop_good'] * df['n_obs']
+    df['n_bad'] = (1 - df['prop_good']) * df['n_obs']
+    df['prop_n_good'] = df['n_good'] / df['n_good'].sum()
+    df['prop_n_bad'] = df['n_bad'] / df['n_bad'].sum()
+    df['WoE'] = np.log(df['prop_n_good'] / df['prop_n_bad'])
+    #df = df.sort_values(['WoE'])
+    #df = df.reset_index(drop = True)
+    df['diff_prop_good'] = df['prop_good'].diff().abs()
+    df['diff_WoE'] = df['WoE'].diff().abs()
+    df['IV'] = (df['prop_n_good'] - df['prop_n_bad']) * df['WoE']
+    df['IV'] = df['IV'].sum()
+    return df
+
+# We set the default style of the graphs to the seaborn style. 
+sns.set()
+# function to plot WoE value
+def plot_by_woe(df_WoE, rotation_of_x_axis_labels = 0):
+    x = np.array(df_WoE.iloc[:, 0].apply(str))
+    y = df_WoE['WoE']
+    plt.figure(figsize=(18, 6))
+    plt.plot(x, y, marker = 'o', linestyle = '--', color = 'k')
+    plt.xlabel(df_WoE.columns[0])
+    plt.ylabel('Weight of Evidence')
+    plt.title(str('Weight of Evidence by ' + df_WoE.columns[0]))
+    plt.xticks(rotation = rotation_of_x_axis_labels)
+
+# create a list of all the reference categories, i.e. one category from each of the global features
+ref_categories = ['mths_since_last_credit_pull_d:>75', 'mths_since_issue_d:>122', 'mths_since_earliest_cr_line:>434', 'total_rev_hi_lim:>79,780', 
+                  'total_rec_int:>7,260', 'total_pymnt:>25,000', 'out_prncp:>15,437', 'revol_util:>1.0', 'inq_last_6mths:>4', 'dti:>35.191', 
+                  'annual_inc:>150K', 'int_rate:>20.281', 'term:60', 'purpose:major_purch__car__home_impr', 'verification_status:Not Verified', 
+                  'home_ownership:MORTGAGE', 'grade:G']	
+
+# custom transformer class to create new categorical dummy features
 
 ```
 
@@ -617,3 +700,101 @@ Esto es menor al modelo de bayes, luego se deben analizar los tipos de errores e
 
 <!-- #endregion -->
 
+
+Se observa que el modelo logístico tiene mayor tasa de acierto cuando __good_status__ es 0, se tiene en cuenta las variables para el modelo.
+
+
+
+# Score
+
+Con las variables seleccionadas se obta por crear un modelo con todos los datos, las variables numericas se dividen en 4 grupos (open_acc en 2 grupos) con __pd.cut__, se define un score de 300 a 850.
+
+Para las variables el nivel de refencia son:
+
+- __loan_amnt__: (9500.0, 18000.0]
+
+- __int_rate__: (5.98, 11.015]
+
+- __open_acc__: (-0.084, 42.0]
+
+- __home_ownership__: MORTGAGE
+
+- __emp_length__: 1 year
+
+```{python}
+X_model=X[var_ ].copy()
+X_model=X_model.reset_index()
+X_model=X_model.drop(labels="index", axis=1)
+# varibles continuas
+X_model["loan_amnt"]=pd.cut(X_model["loan_amnt"],4)
+X_model["int_rate"]=pd.cut(X_model["int_rate"],4)
+X_model["open_acc"]=pd.cut(X_model["open_acc"],2)
+# dummy de variables
+X_model=dummy_creation(X_model, ["loan_amnt","int_rate", "open_acc"])
+# ajuiste modelo logistico
+modelo_final = LogisticRegression()
+modelo_final.fit(X_model, Y)
+df_scorecard=pd.DataFrame({"variables_modelo":["(intercept)", *list(X_model.columns)],
+                      "Coefficients":[modelo_final.intercept_[0],*modelo_final.coef_.tolist()[0]] }) 
+df_scorecard["var_origen"]=df_scorecard["variables_modelo"].apply(lambda x: x.split(":")[0] )
+min_score = 300
+max_score = 850
+def min_temp(vector):
+    result=vector.min()
+    if result>0 :
+        result=0
+    return result
+def max_temp(vector):
+    result=vector.max()
+    if result<0:
+        result=0
+    return result
+# calculate the sum of the minimum coefficients of each category within the original feature name
+min_sum_coef = df_scorecard.groupby('var_origen')['Coefficients'].apply(min_temp).sum()+df_scorecard.loc[0,'Coefficients']
+# calculate the sum of the maximum coefficients of each category within the original feature name
+max_sum_coef = df_scorecard.groupby('var_origen')['Coefficients'].apply(max_temp).sum()#+df_scorecard.loc[0,'Coefficients']
+df_scorecard['Score - Calculation'] = df_scorecard['Coefficients'] * (max_score - min_score) / (max_sum_coef - min_sum_coef)
+# min_sum_coef = df_scorecard.groupby('var_origen')['Coefficients'].apply(min).sum()
+# update the calculated score of the Intercept
+df_scorecard.loc[0, 'Score - Calculation'] = ((df_scorecard.loc[0,'Coefficients'] - min_sum_coef) /
+                                              (max_sum_coef - min_sum_coef
+                                              )) * (max_score - min_score) + min_score
+# # round the values of the 'Score - Calculation' column and store them in a new column
+df_scorecard['Score - Final'] = df_scorecard['Score - Calculation'].round()
+
+# check the min and max possible scores of our scorecard
+min_sum_score_prel = df_scorecard.groupby('var_origen')['Score - Final'].apply(min_temp).sum()+df_scorecard.loc[0, 'Score - Final']
+max_sum_score_prel = df_scorecard.groupby('var_origen')['Score - Final'].apply(max_temp).sum()
+```
+
+
+`r kbl(py$df_scorecard, escape = F, align = "c", caption="Tabla score de cada variable",row.names=F,digits =2) %>%  kable_classic_2("striped", full_width = F)`
+
+En esta tabla se puede observar que la población que desde el inicio del crédito al final del crédito con $\leq 12$ meses afecta negativamente al score con 171 puntos menos, si se tiene el estado de la vivienda diferente a hipoteca, afecta negativamente, si se tiene varias lineas de crédito ($\geq$ 42) afecta de manera positia, si la tasa de interes es alta afecta de manera negativa al score, si se pide un prestamo superior a 9.500 dolares afecta el score. 
+
+
+
+```{python}
+scores=np.array(df_scorecard["Score - Final"])
+scores.shape=(24,1)
+X_model_temp=pd.concat([ pd.DataFrame({"(intercept)" :list(np.repeat(1,X_model.shape[0]))} ),X_model],axis=1,ignore_index=True ).copy() 
+score_poblacional=np.matmul(np.array(X_model_temp),scores)
+score_poblacional=pd.DataFrame(np.transpose(score_poblacional).tolist()[0])
+Y=Y.reset_index()
+Y=Y.drop(labels="index",axis=1 )
+score_poblacional["good_status"]=Y
+fig = px.histogram(score_poblacional, x=0 ,color="good_status",
+                   marginal="box",  #or violin, rug
+                   hover_data=score_poblacional.columns)
+fig.show()
+score_poblacional.to_csv("score_poblacional.csv")
+```
+
+
+Esta es la distrubución del score para toda la población y se discrimina por good_status, se observa que aqullos usuarios con incumpliminetos financieros en promedio tienen un score menor a los que no tienen incumpliminetos financieros.
+
+
+# Conclusión
+
+
+Aunque en cierta medida el score no capta la tendencia de todos los datos, se puede observar una diferencia notoria aunque no ideal, pues este fue el mejor modelo que se consiguio.

@@ -1,5 +1,5 @@
-library(DT) # print table beutefull
-library(sf) # manupulación geolocalizaciones
+#library(DT) # print table beutefull
+#library(sf) # manupulación geolocalizaciones
 library(tmap)  # graficos interactivos de mapas
 library(dplyr) # manejo de funciones
 library(shiny) # aplicacion
@@ -7,10 +7,10 @@ library(plotly) # graficos
 library(shinydashboard)
 library(tidyverse)
 library(shinycssloaders)# to add a loader while graph is populating
-#df=read.csv("datos_modelo.csv")
-#modelo_logistico<-glm(good_status ~., data = df[,-1], family = "binomial")
-#saveRDS(modelo_logistico,"modelo.RDS" )
-modelo_logistico <-readRDS("modelo.RData")# glm(good_status ~., data = df[,-1], family = "binomial")
+
+score_global<-read.csv("coef_score.csv")[,c(2,6)]
+score_datos<-read.csv("score_poblacional.csv")[,2]
+score_datos<-sort(score_datos,T)
 emp_temp<-c("10+ years", "1 year"  ,  "2 years",   "4 years" ,  "3 years",   "7 years" ,  "5 years"   ,"6 years"  ,
             "9 years"  , "8 years" ,  "< 1 year" 
             )
@@ -75,7 +75,8 @@ usuario<- fluidPage(
                                                      value = 10,
                                                      step = 0.1,
                                                      width = "100%") ),
-                                fluidRow( uiOutput("Predicion")  )
+                                fluidRow( uiOutput("Predicion"),
+                                          plotlyOutput('score_poblacional'))
                               ))))
     )
     
@@ -103,7 +104,9 @@ output$intro_<- renderUI({
   HTML("<h2 style='text-align:center' > Introducción <h2/>
   <h5>Les brindamos esta aplicacion que 
   permite de forma agil calcular el porccentaje de riesgo y el
-  score crediticio a los usuarios del publico común<h5/>
+  score crediticio a los usuarios del publico. común<h5/>
+  <h2 style='text-align:center' > Objetivo <h2/>
+    <h5>Que el usuario consulte su score al cabo de 12 meses desde que solicita un crédito.<h5/>
   <h2 style='text-align:center'> ¿A quién va dirigido? <h2/>
 <h5>  A usuarios que esten interesados en su historial crediticio.<h5>
 <h2 style='text-align:center'> Video promocional <h2/>
@@ -127,21 +130,117 @@ output$intro_<- renderUI({
   
   
 })
+
+
 output$Predicion<-renderUI({
-  predicciones <- predict(modelo_logistico, data.frame(target_time =1,
-                                                       pub_rec=as.numeric(input$pub_rec),
-                                                       loan_amnt=c(input$loan_amnt),
-                                                       int_rate =c(input$int_rate) ,
-                                                       open_acc=c(input$open_acc),
-                                                       emp_length=c(input$emp_length),
-                                                       home_ownership=c(input$home_ownership)),
-                          se.fit = TRUE)
-  predicciones_logit <- exp(predicciones$fit) / (1 + exp(predicciones$fit))
-  print(predicciones_logit)
-  HTML(paste("El usuario que cumple con estas caracteristicas tiene un score de ",as.character(predicciones_logit),sep=" " ) )
+  home_temp= grepl(input$home_ownership, score_global$variables_modelo )
+  if (sum(home_temp)==0 ){
+    home_temp=0
+  }
+  else{
+    home_temp=score_global[home_temp,2]  
+  }
+  emp_<-grepl(input$emp_length, score_global$variables_modelo )
+  if (sum(emp_)==0 ){
+    emp_=0
+  }
+  else{
+    emp_=score_global[emp_,2]  
+  }
+  loan_temp<-0
+  if ( (input$loan_amnt>9500) & (input$loan_amnt<=18000) ){
+    loan_temp=-17
+  } 
+  else{ if((input$loan_amnt<=26500) & (input$loan_amnt>18000)){
+    loan_temp=-19
+  }else{if((input$loan_amnt>26500) & (input$loan_amnt<=35000) ){loan_temp=-10}} }
+  int_temp<-0
+  if ( (input$int_rate>11.015) & (input$int_rate<=16.03) ){
+    int_temp=-91
+  } 
+  else{ if((input$int_rate<=21.045) & (input$int_rate>16.03)){
+    int_temp=-151
+  }else{if((input$int_rate>21.045) & (input$int_rate<=26.06) ){int_temp=-190}} }  
+  open_temp<-0
+  if (input$open_acc>42){
+    open_temp<-49
+  }
+  score_=(score_global[1,2]+
+            score_global[2,2]+
+            score_global[3,2]*as.numeric(input$pub_rec)+
+            home_temp+
+            emp_+
+            loan_temp+
+            int_temp+
+            open_temp
+  )
+  percentil_temp<-round(sum(score_datos<=score_)/length(score_datos)*100)
+  HTML(paste("El usuario que cumple con estas caracteristicas tiene un score de ",
+             as.character(score_),
+             "Y se ubica en el ", percentil_temp,
+             " % de los mejores, esto aplica para los 2 primeros meses" 
+             ,sep=" " ) )
 })
   
-#  write.csv(data.frame(modelo_logistico$coefficients),"coeficientes_logistico.csv", row.names = T)
+output$score_poblacional<- renderPlotly({
+  home_temp= grepl(input$home_ownership, score_global$variables_modelo )
+  if (sum(home_temp)==0 ){
+    home_temp=0
+  }
+  else{
+    home_temp=score_global[home_temp,2]  
+  }
+  emp_<-grepl(input$emp_length, score_global$variables_modelo )
+  if (sum(emp_)==0 ){
+    emp_=0
+  }
+  else{
+    emp_=score_global[emp_,2]  
+  }
+  loan_temp<-0
+  if ( (input$loan_amnt>9500) & (input$loan_amnt<=18000) ){
+    loan_temp=-17
+  } 
+  else{ if((input$loan_amnt<=26500) & (input$loan_amnt>18000)){
+    loan_temp=-19
+  }else{if((input$loan_amnt>26500) & (input$loan_amnt<=35000) ){loan_temp=-10}} }
+  int_temp<-0
+  if ( (input$int_rate>11.015) & (input$int_rate<=16.03) ){
+    int_temp=-91
+  } 
+  else{ if((input$int_rate<=21.045) & (input$int_rate>16.03)){
+    int_temp=-151
+  }else{if((input$int_rate>21.045) & (input$int_rate<=26.06) ){int_temp=-190}} }  
+  open_temp<-0
+  if (input$open_acc>42){
+    open_temp<-49
+  }
+  score_=(score_global[1,2]+
+            score_global[2,2]+
+            score_global[3,2]*as.numeric(input$pub_rec)+
+            home_temp+
+            emp_+
+            loan_temp+
+            int_temp+
+            open_temp
+  )
+  #print(score_)
+#  score_temps<-data.frame(Score=c(score_datos,100), Tipo=c(rep("Poblacion",length(score_datos)),"Usuario")  )
+  fig <- plot_ly(alpha = 0.6)
+  fig <- fig %>% add_histogram(x=~score_datos)
+  fig <-fig %>%  add_lines(
+    y = c(0,12000),
+    x = score_,
+    line = list(
+      color = "grey"
+    ),
+    inherit = FALSE,
+    showlegend = FALSE
+  )
+
+  fig
+} )
+
 }
 
 shinyApp(
