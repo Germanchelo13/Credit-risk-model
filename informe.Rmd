@@ -1,6 +1,6 @@
 ---
-title: "informe"
-author: "Germán alonso"
+title: "informe modelo de riesgo crediticio"
+author: "Germán Patiño, \n David Andres Cano Gonzalez, \n David Garcia Blandon \n ,Juan Pablo Buitrago Diaz"
 date: "2022-10-10"
 output: 
   html_document:
@@ -15,12 +15,7 @@ output:
     fig_caption: true
 ---
 
-```{r}
-
-
-```
-
-```{css, echo = F}
+```{css echo=FALSE, language="css"}
 h1  {
   text-align: center;
   color: navy;
@@ -40,9 +35,10 @@ body {
   color: black;
   counter-reset:section;
 }
-caption {
+figcaption {
   text-align: center;
   color: black;
+  font-size: 20px;
 }
 caption::before {
     counter-increment: section;
@@ -50,36 +46,23 @@ caption::before {
 }
 ```
 
-```{r,include=FALSE}
-#  background-color: #EEF6F9;
-```
-
 #  Introducción 
 
- 
-
-El riesgo de crédito se refiere a la probabilidad de pérdida debido a un incumplimiento en los pagos de cualquier tipo de deuda, se cuenta con una base de datos <a href="https://drive.google.com/file/d/1xaF743cmUgI5kc76I86AeZDE84SMkMnt/view"> loan_data_2007_2014.csv </a> con información de usuarios desde 2007 a 2014 disponible en <a href ="https://www.kaggle.com/datasets/devanshi23/loan-data-2007-2014"> kaggle </a> su fuente es de <a href="https://www.lendingclub.com/" > lendingclub </a> que es un tipo de prestamista P2P (prestamos digitales) de EE. UU. contiene información reciente de interés como el estado del prestamo y varios factores que pueden influir en si la persona paga o no el prestamo.
-
+Para esta segunda práctica nos encontrábamos frente a un problema de riesgo de crédito, el cual permite predecir mediante probabilidad la posibilidad de incurrir en una pérdida debido a un incumplimiento de un futuro crédito que se desee brindar. 
 
 
 # Objetivo
 
+El objetivo principal de la práctica fue el de realizar un modelo de probabilidad el cual permitiese predecir la probabilidad de que un individuo incumpla sus obligaciones financieras en los siguientes 12 meses desde que se genere el crédito.
 
+También se debía representar este mismo modelo con un Scorecard. De igual forma se debía analizar qué variables hacen más riesgosa a una persona. Y finalmente, se debía desarrollar una aplicación web que le permitiera a los usuario ver su calificación de scorecard, de acuerdo a sus características, y cómo se encuentra respecto al resto de la población.
 
-Crear un modelo de probabilidad para el incumplimiento de los pagos con la base de datos, para predecir la probabilidad de que un individuo incumpla sus obligaciones financieras en los siguientes 12 meses desde que se genero el crédito.
-
+  
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(reticulate)
 library(kableExtra)
 ```
-
-
-
-Este informe se usara con un lenguaje de programación Python usando las siguientes librerias:
-
--   pandas: Lectura y manejo de data frame.
--   numpy: Arreglos matriciales.
 
 ```{python librerias}
 import pandas as pd
@@ -88,22 +71,132 @@ import seaborn as sns
 from scipy.stats import chi2_contingency
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import accuracy_score
+from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
+import plotly.express as px
+from sklearn.naive_bayes import GaussianNB
+from tqdm import tqdm
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
+from sklearn.linear_model import LogisticRegression
+```
+
+```{python}
 mes_name=['Dec', 'Nov', 'Oct', 'Sep', 'Aug', 'Jul', 'Jun', 'May', 'Apr', 'Mar', 'Feb', 'Jan']
 mes_num=list(pd.Series(list((13-np.arange(1,13)))).astype("str"))
-def format_replace(string_):
+def format_replace(string_): # ajust formato de fecha
     for i in range(0,12):
         string_=str(string_).replace(mes_name[i],mes_num[i] )
     return string_
+def dummy_creation(df_, columns_list): # creacion de variables dummy
+    df_dummies = []
+    for col in columns_list:
+        df_dummies.append(pd.get_dummies(df_[col], prefix = col, prefix_sep = ':',drop_first=True))
+    df_dummies = pd.concat(df_dummies, axis = 1)
+    df_ = pd.concat([df_, df_dummies], axis = 1)
+    df_=df_.drop(labels=columns_list,axis=1)
+    return df_
+def plot_barplot(df_temp, x, y,nrow,ncol,fig_temp,show_leg):
+    df1 = df_temp.groupby(x)[y].value_counts(normalize=True)
+    df1 = df1.mul(100)
+    df1 = df1.rename('percent').reset_index()
+    df_temp=df1[df1[y]==1].copy()
+    fig_temp.add_trace(go.Bar(x=df_temp[x],
+                y=df_temp["percent"],
+                name="1",
+                marker_color='rgb(55, 83, 109)',
+                              hovertext =(x,"percent" ),
+                              showlegend=show_leg
+                ), row=nrow,col=ncol)
+    df_temp=df1[df1[y]==0].copy()
+    fig_temp.add_trace(go.Bar(x=df_temp[x],
+                y=df_temp["percent"],
+                name="0",
+                marker_color='rgb(26, 118, 255)',
+                              hovertext =(x,"percent" ),
+                              showlegend=show_leg
+                ),row=nrow,col=ncol)
+    fig_temp.update_yaxes(range = [0,100])
+    return fig_temp
+# function to calculate WoE and IV of categorical features
+# The function takes 3 arguments: a dataframe (X_train_prepr), a string (column name), and a dataframe (y_train_prepr).
+def woe_discrete(df, cat_variabe_name, y_df):
+    df = pd.concat([df[cat_variabe_name], y_df], axis = 1)
+    df = pd.concat([df.groupby(df.columns.values[0], as_index = False)[df.columns.values[1]].count(),
+                    df.groupby(df.columns.values[0], as_index = False)[df.columns.values[1]].mean()], axis = 1)
+    df = df.iloc[:, [0, 1, 3]]
+    df.columns = [df.columns.values[0], 'n_obs', 'prop_good']
+    df['prop_n_obs'] = df['n_obs'] / df['n_obs'].sum()
+    df['n_good'] = df['prop_good'] * df['n_obs']
+    df['n_bad'] = (1 - df['prop_good']) * df['n_obs']
+    df['prop_n_good'] = df['n_good'] / df['n_good'].sum()
+    df['prop_n_bad'] = df['n_bad'] / df['n_bad'].sum()
+    df['WoE'] = np.log(df['prop_n_good'] / df['prop_n_bad'])
+    df = df.sort_values(['WoE'])
+    df = df.reset_index(drop = True)
+    df['diff_prop_good'] = df['prop_good'].diff().abs()
+    df['diff_WoE'] = df['WoE'].diff().abs()
+    df['IV'] = (df['prop_n_good'] - df['prop_n_bad']) * df['WoE']
+    df['IV'] = df['IV'].sum()
+    return df
+
+'''
+function to calculate WoE & IV of continuous variables
+This is same as the function we defined earlier for discrete variables
+The only difference are the 2 commented lines of code in the function that results in the df
+being sorted by continuous variable values
+'''
+def continua_categorica(df_,variable,y_df ):
+    quantiles_=list(df_[variable].quantile([0.15,0.3,0.45,0.6,0.75,0.9]))
+    new_var=[variable+str(quantiles_[0])]
+    df_[variable+str(quantiles_[0])]=np.where(df_[variable]<quantiles_[0],1,0 )
+    for i in range(1,len(quantiles_)-1):
+        new_var.append(variable+str(quantiles_[i]))
+        df_[variable+str(quantiles_[i]) ]=np.where((df_[variable]<=quantiles_[i]) & (df_[variable]>quantiles_[i-1]),1,0 )    
+    df_[variable+str(quantiles_[5])]=np.where(df_[variable]>=quantiles_[5],1,0)
+    new_var.append(variable+str(quantiles_[5]) )
+    woes=[]
+    for vars_ in new_var:
+        woe_temp=[*list(woe_ordered_continuous(df_,vars_,y_df )["WoE"] ),vars_]
+        woes.append(woe_temp)
+    return woes
+    
+def woe_ordered_continuous(df, continuous_variabe_name, y_df):
+    df = pd.concat([df[continuous_variabe_name], y_df], axis = 1)
+    df = pd.concat([df.groupby(df.columns.values[0], as_index = False)[df.columns.values[1]].count(),
+                    df.groupby(df.columns.values[0], as_index = False)[df.columns.values[1]].mean()], axis = 1)
+    df = df.iloc[:, [0, 1, 3]]
+    df.columns = [df.columns.values[0], 'n_obs', 'prop_good']
+    df['prop_n_obs'] = df['n_obs'] / df['n_obs'].sum()
+    df['n_good'] = df['prop_good'] * df['n_obs']
+    df['n_bad'] = (1 - df['prop_good']) * df['n_obs']
+    df['prop_n_good'] = df['n_good'] / df['n_good'].sum()
+    df['prop_n_bad'] = df['n_bad'] / df['n_bad'].sum()
+    df['WoE'] = np.log(df['prop_n_good'] / df['prop_n_bad'])
+    #df = df.sort_values(['WoE'])
+    #df = df.reset_index(drop = True)
+    df['diff_prop_good'] = df['prop_good'].diff().abs()
+    df['diff_WoE'] = df['WoE'].diff().abs()
+    df['IV'] = (df['prop_n_good'] - df['prop_n_bad']) * df['WoE']
+    df['IV'] = df['IV'].sum()
+    return df
+
+
+
 ```
 
 # Depuración
 
-```{python,message=FALSE}
+Para este ejercicio, se contó con la base de datos loan_data_2007_2014.csv obtenida a través de kaggle. Esta contiene información perteneciente a usuarios entre los años 2007 y 2014 de lendingclub, una empresa que realiza préstamos digitales en Estados Unidos ( lendingclub ).
+
+```{python message=FALSE}
 df=pd.read_csv("loan_data_2007_2014.csv")
 ```
-```{python,include=FALSE}
+```{python include=FALSE}
 df[ 'issue_d']=df[ 'issue_d'].apply(format_replace)
 df['last_pymnt_d']=df['last_pymnt_d'].apply(format_replace)
+df[ 'earliest_cr_line']=df[ 'earliest_cr_line'].apply(format_replace)
+df['earliest_cr_line']=pd.to_datetime(df['earliest_cr_line'], format = "%m-%y")
 ```
 
 La base de datos <a href="https://drive.google.com/file/d/1xaF743cmUgI5kc76I86AeZDE84SMkMnt/view"> loan_data_2007_2014.csv </a> cuenta con 74 columnas y 466285 registros.
@@ -132,7 +225,8 @@ Se crea las variables.
 
 - __good_status__: Que tomara valores 0 (con morosidad) y 1 (Sin morosidad)
 
-```{python,results="asis"}
+```{python }
+#results="asis"
 table_frec=pd.DataFrame(df["loan_status"].value_counts())
 status_mora=['Charged Off', 'Default', 'Late (31-120 days)','Does not meet the credit policy. Status:Charged Off']
 table_frec["good_status"]=1
@@ -146,17 +240,17 @@ df.loc[df["loan_status"].isin(status_mora),"good_status"]=0
 ```
 
 
+`r kbl(py$df_temp, escape = F, align = "c", caption="Categorías good_status") %>%  kable_classic_2("striped", full_width = F)`
 
-
-`r kbl(py$df_temp, escape = F, align = "c", caption="Categorías good_status ") %>%  kable_classic_2("striped", full_width = F)`
-
+En la Table 1 se observan las categorías que tiene la variable de interés.
 
 - __month_last__: last_pymnt_d-issue_d en meses.
 
-```{python,warning=FALSE}
+```{python warning=FALSE}
 df[ 'issue_d']=pd.to_datetime(df['issue_d'], format = "%m-%y")
 df['last_pymnt_d']=pd.to_datetime(df['last_pymnt_d'], format = "%m-%y")
 df["month_last"]= ((df.last_pymnt_d - df.issue_d)/np.timedelta64(1, 'M'))
+
 ```
 
 
@@ -184,7 +278,7 @@ Donde __month_last__ define el tiempo en que queremos predecir, $X$ es un vector
 Asumiendo que se tolera al menos un 20 % de valores NA en los datos de las y omitiendo las columnas de identificación se cuenta con:
 
 
-```{python , results="asis"}
+```{python }
 drop_columns=["id", "member_id", "url", "title"]
 df=df.drop(labels=drop_columns,axis=1 )
 total_na=df.isna().sum()
@@ -195,30 +289,31 @@ result=pd.DataFrame({"Variables":["Menos del 20% NA"," Mas del 20% NA"],
 ```
 
 
+
+
 `r kbl(py$result, escape = F, align = "c", caption="Resumen de NA") %>%  kable_classic_2("striped", full_width = F)`
 
 
-Se omiten 22 variables por su alto porcentaje de valores faltantes, aunque 20% de valores faltantes es una cantidad alta, existen variables importantes que contienen alta cantidad de valores faltantes que se muestran a continuación.
+En la Table 2 se observa la cantidad % de NA que tienen las variables, según esto se considera omitir 22 variables por su alto porcentaje de valores faltantes, aunque 20% de valores faltantes es una cantidad alta, existen variables importantes que contienen alta cantidad de valores faltantes que se muestran a continuación.
 
 
 ## Variables modelo
 
 
-```{python,results='asis'}
+```{python }
 vars_=total_na.sort_values(ascending=False).head()
 result=pd.DataFrame({"Variables":vars_.index,"Descripción":[" Total crédito rotativo alto entre límite de crédito. ","Saldo corriente en todas las cuentas ", " Montos totales de cobro adeudados. ", "Tipo de trabajo.","Años en el trabajo "   ], "Total NA":vars_ })
 result=result.reset_index()
 ```
 
+`r kbl(py$result, escape = F, align = "c",row.names=F, caption="Variables candidatas al modelo") %>%  kable_classic_2("striped", full_width = F)`
 
-`r kbl(py$result, escape = F, align = "c", caption="Variables candidatas") %>%  kable_classic_2("striped", full_width = F)`
-
-De estas variables puede ser dificil que el usuario obtenga __total_rev_hi_lim__, __emp_title__ tiene muchas categorías.
+En la Tabla 3 se tiene una pequeña descripción de variables importantes con una cantidad de NA alta, de estas variables puede ser dificil que el usuario obtenga __total_rev_hi_lim__, __emp_title__ tiene muchas categorías.
 
 Es importante identificar que variables puede dar un usuario al momento del registro, pues existen variables donde se obtienen la información al pasar el tiempo o un usuario no puede identificar.
 
 
-```{python, include=FALSE}
+```{python include=FALSE}
 variables_eliminar="""funded_amnt_inv
 grade
 sub_grade
@@ -254,14 +349,15 @@ variables_eliminar.columns=[" "]*4
 ```
 
 
+
 `r kbl(py$variables_eliminar, escape = F, align = "c", caption="Variables que no se incluyen") %>%  kable_classic_2("striped", full_width = F)`
 
 
-Las variables en la tabla no se tienen en cuenta porque son medidas que son proporcionadas por LC, información al pasar el tiempo después del prestamo o son extraidas de un externo, por ende, las variables a considerar como influyentes en el incumplimiento de las finanzas son:
+La Table 4 contiene Las variables que no se consideran en el modelo porque son medidas que son proporcionadas por LC, información al pasar el tiempo después del prestamo o son extraidas de un externo, por ende, las variables a considerar como influyentes en el incumplimiento de las finanzas son:
 
 
 
-```{python,include=FALSE}
+```{python include=FALSE}
 variables="""__loan_amnt__:El monto indicado del préstamo solicitado por el prestatario. Si en algún momento, el departamento de crédito reduce el monto del préstamo, entonces se reflejará en este valor.
 
 __funded_amnt__: El monto total comprometido con ese préstamo en ese momento.
@@ -272,13 +368,9 @@ __int_rate__: tasa de interés del préstamo.
 
 __installment__:cuota El pago mensual adeudado por el prestatario si el préstamo se origina.
 
-__emp_length__: años trabajo
-
 __home_ownership__: El estado de propiedad de la vivienda proporcionado por el prestatario durante el registro. Nuestros valores son: ALQUILER, PROPIEDAD, HIPOTECA, OTRO.
 
 __annual_inc__: Los ingresos anuales autoinformados proporcionados por el prestatario durante el registro.
-
-__pymnt_plan__: indica si se a establecido un plan de pago.
 
 __earliest_cr_line__: El mes en que se abrió la primera línea de crédito reportada del prestatario.
 
@@ -286,14 +378,19 @@ __open_acc__: El número de líneas de crédito abiertas en el archivo de crédi
 
 __pub_rec__: numero de derogatory public records.
 
-__initial_list_status__: El estado inicial de listado del préstamo. Los valores posibles son – W, F
-
 __acc_now_delinq__:El número de cuentas en las que el prestatario está ahora en mora.
 
 __purpose__: Razón por la que se hace el prestamo.
 
 __tot_cur_bal__:Saldo corriente total de todas las cuentas
+
+__emp_length__: años trabajo
+
+__initial_list_status__: El estado inicial de listado del préstamo. Los valores posibles son – W, F
+
+__pymnt_plan__: indica si se a establecido un plan de pago.
 """.split("\n")
+
 #.replace("__","")
 variables=pd.Series(variables)
 variables_= variables[~(variables=="")].apply(lambda x: x.split(":")[0])
@@ -302,23 +399,24 @@ result=pd.DataFrame({"Variables": variables_, "Descripción":descripcion_ })
 ```
 
 
-
 `r kbl(py$result, escape = F, align = "l", caption="Covariables candidatas",row.names=F) %>%  kable_classic_2("striped", full_width = F)`
 
-En esta tabla se tienen las posibles variables para el modelo, con __good_status__ y __target_time__.
+En la Table 5 se tienen la cantidad de variables que se pueden usar en el modelo, con __good_status__ y __target_time__.
 
 
-```{python,results='asis'}
+```{python}
 variables_=pd.Series(variables_).apply(lambda x: x.replace("__","" ))
-df=df[ [*variables_, "good_status","target_time" ]] 
+df["month_earliest_cr_line"]=((df.issue_d-df.earliest_cr_line )/np.timedelta64(1, 'M'))
+df=df[ [*variables_, "good_status","target_time","month_earliest_cr_line" ]] 
 df=df[~df.isna().any(axis=1)]
 result=pd.DataFrame({"":["Filas", "Columnas"] ,"Cantidad":df.shape})
-#print_table(result, "Dimensiones")
 ```
+
+
 
 `r kbl(py$result, escape = F, align = "l", caption="Dimensión de datos") %>%  kable_classic_2("striped", full_width = F)`
 
-Como resultado para el modelo se usara un data frame con estas dimesiones.
+En la Table 6 se observa las dimensiones del data frame que se usara para el modelo excluyendo los NA.
 
 # Analisis Descriptivo
 
@@ -336,17 +434,17 @@ table_final=pd.DataFrame({"good status":[1,0],"Frecuencia":tabla_2,
 ```
 
 
-`r kbl(py$table_final, escape = F, align = "l", caption="Distribución global",row.names=F,digits =2) %>%  kable_classic_2("striped", full_width = F)`
+`r kbl(py$table_final, escape = F, align = "l",row.names=F,digits =2,caption="Distribución global de good_status") %>%  kable_classic_2("striped", full_width = F)`
 
 
 
+En la Table 7 se puede obserar la distribución frecuentista de good_status 
+La variable __acc_now_delinq__ se puede transformar en 1 si tiene al menos una cuenta en mora, 0 sino tiene cunetas en mora. También la variable __pub_rec__ se transforma 1 si tiene al menos un derogatory public records, 0 sino. Se tomo la decisión ya que son variables conteos donde no parece ser necesario. Como esta es la fecha en que se hizo su primer prestamo __earliest_cr_line__, se debe calcular los meses que han pasado desde que solicito el prestamo __month_earliest_cr_line__
 
-La variable __acc_now_delinq__ se puede transformar en 1 si tiene al menos una cuenta en mora, 0 sino tiene cunetas en mora. También la variable __pub_rec__ se transforma 1 si tiene al menos un derogatory public records, 0 sino. Se tomo la decisión ya que son variables conteos donde no parece ser necesario.
 
-
-```{python}
+```{python tags=c()}
+df=df.drop(labels="earliest_cr_line",axis=1)
 df["acc_now_delinq"]=np.where(df["acc_now_delinq"]>0, 1,0)
-
 df["pub_rec"]=np.where(df["pub_rec"]>0,1,0)
 ```
 
@@ -373,24 +471,440 @@ for column in X_train_cat:
 # convert the dictionary to a DF
 chi2_result = pd.DataFrame(data = chi2_check)
 chi2_result.sort_values(by = ['p-value'], ascending = True, ignore_index = True, inplace = True)
-
 ```
 
 
 `r kbl(py$chi2_result, escape = F, align = "c", caption="Prueba ",row.names=F,digits =2) %>%  kable_classic_2("striped", full_width = F)`
 
-Se realiza pruebas $\chi^2$ para las variables categoricas en contraste con la variable __good_status__ y se observa 6 variables con un p-valor pequeño, esto significa que estas variables pueden influir en el incumplimiento de las finanzas. Se excluye __pymnt_plan__ debido a un p-valor > 0.05.
+En la Table 8 Se realizan pruebas $\chi^2$ para las variables categoricas en contraste con la variable __good_status__ y se observa 8 variables con un p-valor pequeño, esto significa que estas variables pueden influir en el incumplimiento de las finanzas. Se excluye __pymnt_plan__ debido a un p-valor > 0.05.
 
 
-```{python, fig.cap="Correlación entre variables númericas."}
+```{python }
 corrmat = X_train_num.corr()
-# plt.figure(figsize=(10,10))
 sns.heatmap(corrmat)
 ```
 
+<figcaption> Figure 1: Correlación entre variables númericas. </figcaption>
 
-En la figura 1 se observa que hay 3 variables con una alta correlación entre si ($\approx$ 1) que son: __loan_amnt__, __funded_amnt__, __installment__ y según la table - 5 se opta por __loan_amnt__ por ser el prestamo definitivo que dio LC.
+En la Figure 1 se observa que hay 3 variables con una alta correlación entre si ($\approx$ 1) que son: __loan_amnt__, __funded_amnt__, __installment__ y según la table - 5 se opta por __loan_amnt__ por ser el prestamo definitivo que dio LC.
+
+```{python}
+vars_=['loan_amnt',  'int_rate', 'annual_inc',
+       'open_acc', 'tot_cur_bal',"month_earliest_cr_line"]
+fig, axs = plt.subplots(ncols=3,nrows=2,figsize=(18, 7))
+sns.boxplot(data=df, x="good_status", y=vars_[0], ax=axs[0, 0],showfliers = False)
+sns.boxplot(data=df, x="good_status", y=vars_[1], ax=axs[0, 1],showfliers = False)
+sns.boxplot(data=df, x="good_status", y=vars_[2], ax=axs[0, 2],showfliers = False)
+sns.boxplot(data=df, x="good_status", y=vars_[3], ax=axs[1, 1],showfliers = False)
+sns.boxplot(data=df, x="good_status", y=vars_[4], ax=axs[1, 2],showfliers = False)
+sns.boxplot(data=df, x="good_status", y=vars_[5], ax=axs[1, 0],showfliers = False)
+```
+
+<figcaption> Figure 2: Box plot comparativos dado good_status. </figcaption>
+
+
+En la Figure 2 se observa que las variables con una tendencia de influir en __good_status__ son __int_rate__, __annual_inc__ pues aunque no se observa gran diferencia, parece existir una influencia.
+
+Las variables a usar para crear el modelo son: 
+
+```{python}
+variables_final=list(chi2_result["Feature"].iloc[0:8])
+variables_final=[*variables_final,*vars_,"good_status"]
+result=np.array([*variables_final,""])
+result.shape=(4,4)
+result=pd.DataFrame(result)
+result.columns=[""]*4
+```
+
+`r kbl(py$result, escape = F, align = "l", caption="Covariables del modelo",row.names=F,digits =2) %>%  kable_classic_2("striped", full_width = F)`
+
+En la Table 9 se encuentran las covariables que se tendran en cuenta en el modelo.
+
+```{python tags=c(),fig.caption="Bar plot comparativos"}
+df.loc[df["home_ownership"] == "ANY","home_ownership"] = 'NONE'
+var_cat=['term','pub_rec','home_ownership','initial_list_status','purpose','emp_length']
+fig_ = make_subplots(rows=4, cols=2,subplot_titles =var_cat)
+fig_ =plot_barplot(df, var_cat[0],"good_status", 1,1,fig_,True)
+fig_ =plot_barplot(df, var_cat[1],"good_status", 1,2,fig_, True)
+fig_ =plot_barplot(df, var_cat[2],"good_status", 2,1,fig_, True)
+fig_ =plot_barplot(df, var_cat[3],"good_status", 2,2,fig_, True)
+fig_ =plot_barplot(df, var_cat[4],"good_status", 3,1,fig_, True)
+fig_ =plot_barplot(df, var_cat[5],"good_status", 3,2,fig_, True)
+# fig_ =plot_barplot(df, var_cat[6],"good_status", 4,1,fig_, True)
+fig_.update_layout(
+    title="Good status",
+    xaxis_tickfont_size=14,
+    yaxis=dict(
+        title='Distribution percent ',
+        titlefont_size=16,
+        tickfont_size=14,
+    ),
+    legend=dict(
+        x=1,
+        y=1.0,
+        bgcolor='rgba(255, 255, 255, 0)',
+        bordercolor='rgba(255, 255, 255, 0)'
+    ),
+    barmode='group',
+    bargap=0.15, # gap between bars of adjacent location coordinates.
+    bargroupgap=0.1, # gap between bars of the same location coordinate.
+    height=1000, width=900
+    )
+```
+
+<figcaption> Figure 3: Bar plot comparativos.</figcaptio>
+
+
+En la Figure 3 se observa los bar plot con frecuencia relativa dado la categoría de good_status.
+
+## ¿Cómo afectan las variables?
+
+* Cuando el número de pagos es $>$ 36 meses la probabilidad de incumplimiento es mayor, es decir, un usuario puede inclumir si tiene mas número de pagos al inicio del prestamo.
+
+* Si el usuario marca NONE o OTHER o RENT influye negativamente, es decir, aumenta la probabilidad de que incumpla sus obligaciones financieras.
+
+* Si el proposito del prestamo es small_business, house, weddlng aumenta la probabilidad de que incumpla sus obligaciones financieras.
+
+* A medida que el usuario tiene menor tiempo de trabajo, aumenta la probabilidad de que incumpla sus obligaciones financieras.
+
+
+# Modelos
+
+Se plantean diferentes modelos aplicando validación cruzada 80\% prueba 20\% test. 
+
+Luego de ensayar modelos se encontro que el valor de probabilidad de cambio mas adecuado es 0.8, es decir, si la probabilidad >=0.8 __good_status__ 1, por el contrario 0.
+
+## Partición de datos
+
+```{python}
+df_modelo=df[variables_final].copy()
+df_modelo.loc[df_modelo["home_ownership"] == "ANY","home_ownership"] = 'NONE'
+X = df_modelo.drop('good_status', axis = 1).copy()
+X=dummy_creation(X, ["term","home_ownership", "purpose",'initial_list_status','emp_length' ,"pymnt_plan"])
+y = df_modelo['good_status'].copy()
+# y= np.where(y==1,0,1)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, random_state = 421)#, stratify = y)
+X_train, X_test = X_train.copy(), X_test.copy()
+result=pd.DataFrame({"":["Filas", "Columnas"] ,"Trian":X_train.shape,"Test":X_test.shape })
+```
+
+
+`r kbl(py$result, escape = F, align = "l", caption="Dimensiones partición",row.names=F,digits =2) %>%  kable_classic_2("striped", full_width = F)`
+
+En la Table 9 se observa las dimenciones de los datos luego de la partición.
+
+## Probabilidad
+
+De los modelos que se van a probar como variable de interés good_status, de los dos modelos se arroja una probabilidad $P(\text{good_status}=1|\text{covariables} )$ ¿pero como elegir si good_status es 1 o 0 dado las covariables? definimos una proporción de particion $p$ tal que:
+
+good_status=1 si $P(\text{good_status}=1|\text{covariables} )\geq p$
+
+good_status=0 si $P(\text{good_status}=1|\text{covariables} )<p$
+
+
+Por lo general se utiliza una proporción de partición de 0.5 pero para los modelos se analizara la tasa de aciertos variando esta proporción.
+
+## Modelo Naive Bayes
+
+De las variables que se escogieron se probo eliminando variables y para el modelo las variables selecionadas son: __target_time__, __pub_rec__, __loan_amnt__, __int_rate__, __open_acc__, __home_ownership__.
+
+```{python tags=c()}
+var_=[
+    'target_time', 
+      'pub_rec', 
+      'loan_amnt', 
+      'int_rate', 
+       'open_acc', 
+       'home_ownership:NONE', 'home_ownership:OTHER', 'home_ownership:OWN',
+       'home_ownership:RENT', 
+     ]
+     
+X_train_pca=X_train[var_].copy()
+# X_train_pca=PCA_5.transform(X_train)
+X_test_pca=X_test[var_].copy()
+# X_test_pca=PCA_5.transform(X_test)
+clf = GaussianNB()
+clf.fit(X_train_pca, y_train)
+
+predict_train_nb= clf.predict_proba(X_train_pca)[:,1]
+predict_test_nb= clf.predict_proba(X_test_pca)[:,1]
+list_aciertos_1_train=[]
+list_aciertos_0_train=[]
+list_aciertos_train=[]
+list_aciertos_1_test=[]
+list_aciertos_0_test=[]
+list_aciertos_test=[]
+list_prop=np.arange(0.5,0.95,0.02)
+for prop_ in list_prop:
+  predict_train_nb_=np.where(predict_train_nb>=prop_,1,0  )
+  validacion_train=pd.concat([y_train.reset_index().drop(labels="index", axis=1),pd.DataFrame({"pron":predict_train_nb_})],axis=1)
+  tabla_validacion=validacion_train.value_counts()
+  aciertos_=((tabla_validacion[1][1]+tabla_validacion[0][0])/tabla_validacion.sum()  )
+  aciertos_1=tabla_validacion[1][1]/tabla_validacion[1].sum()
+  aciertos_0=tabla_validacion[0][0]/tabla_validacion[0].sum()
+  list_aciertos_train.append(aciertos_)
+  list_aciertos_1_train.append(aciertos_1)
+  list_aciertos_0_train.append(aciertos_0)
+  predict_test_nb_=np.where(predict_test_nb>=prop_,1,0  )
+  validacion_test=pd.concat([y_test.reset_index().drop(labels="index", axis=1),pd.DataFrame({"pron":predict_test_nb_})],axis=1)
+  tabla_validacion_test=validacion_test.value_counts()
+  aciertos_1_test=tabla_validacion_test[1][1]/tabla_validacion_test[1].sum()
+  aciertos_0_test=tabla_validacion_test[0][0]/tabla_validacion_test[0].sum()
+  aciertos_test=(tabla_validacion_test[0][0]+tabla_validacion_test[1][1])/tabla_validacion_test.sum()
+  list_aciertos_test.append(aciertos_test)
+  list_aciertos_1_test.append(aciertos_1_test)
+  list_aciertos_0_test.append(aciertos_0_test)
+```
 
 
 
 
+
+```{python}
+fig_ = make_subplots(rows=1, cols=2,subplot_titles =["Datos entrenamiento","Datos prueba"]
+ )
+fig_=fig_.add_trace(go.Scatter(x=list(list_prop), y=list_aciertos_train,
+                    mode='lines',
+                    name='Global'),row=1,col=1)
+                    
+fig_=fig_.add_trace(go.Scatter(x=list(list_prop), y=list_aciertos_1_train,
+                    mode='lines',
+                    name='good_status=1'),row=1,col=1)
+fig_=fig_.add_trace(go.Scatter(x=list(list_prop), y=list_aciertos_0_train,
+                    mode='lines',
+                    name='goo_status=0'),row=1,col=1)                 
+fig_=fig_.add_trace(go.Scatter(x=list(list_prop), y=list_aciertos_test,
+                    mode='lines',
+                    name='Global'),row=1,col=2)
+                    
+fig_=fig_.add_trace(go.Scatter(x=list(list_prop), y=list_aciertos_1_test,
+                    mode='lines',
+                    name='good_status=1'),row=1,col=2)
+fig_=fig_.add_trace(go.Scatter(x=list(list_prop), y=list_aciertos_0_test,
+                    mode='lines',
+                    name='goo_status=0'),row=1,col=2)                 
+#fig_.show()
+fig_.update_layout(
+    title="Modelo Bayes",
+#    xaxis_tickfont_size=dict(title="Probabilidad de partición.",
+#    titlefont_size=16,tickfont_size=14),
+    yaxis=dict(
+        title='Tasa de aciertos',
+        titlefont_size=16,
+        tickfont_size=14,
+    )
+    #,# gap between bars of the same location coordinate.
+#  height=1000, width=900
+    )
+```
+
+<figcaption>Figure 4: Tasa de aciertos para el modelo Bayes.  </figcaption>
+
+
+En la Figure 4 se observa que la tasa de aciertos es muy similar entre los datos de entrenamiento y los datos de prueba por lo que parece el modelo no sobre ajusta y si la proporción de partición es 0.5 se acierta cuando good_status=1, sin embargo para good_status=0 la tasa de aciertos es casi 0, si se aumenta la proporción de partición cuando good_status=0 esta aumenta mientras que cuando es 1 disminuye, y la proporción para este caso mas viable es en 0.92 consiguiendo una tasa de aciertos para good_status 0,1 y en general de al rededor del 67%. 
+
+
+
+## Modelo logístico 
+
+Para este modelo se encontraron las variables apropiadas:  __target_time__, __pub_rec__, __loan_amnt__, __int_rate__, __open_acc__, __home_ownership__, __emp_length__.
+<!-- #endregion -->
+
+```{python}
+var_=[
+    'target_time', 
+      'pub_rec', 
+      'loan_amnt', 
+      'int_rate', 
+       'open_acc', 
+       'home_ownership:NONE', 'home_ownership:OTHER', 'home_ownership:OWN',
+       'home_ownership:RENT', 
+      'emp_length:10+ years', 'emp_length:2 years',
+       'emp_length:3 years', 'emp_length:4 years', 'emp_length:5 years',
+       'emp_length:6 years', 'emp_length:7 years', 'emp_length:8 years',
+       'emp_length:9 years', 'emp_length:< 1 year'
+     ]
+X_train_pca=X_train[var_]
+# X_train_pca=PCA_5.transform(X_train)
+X_test_pca=X_test[var_]
+# X_test_pca=PCA_5.transform(X_test)
+Modelo = LogisticRegression()#C=1e-09,class_weight="balanced",solver="sag")
+Modelo.fit(X_train_pca, y_train)
+prop_=0.8
+predict_train_log= Modelo.predict_proba(X_train_pca)[:,1]
+predict_test_log= Modelo.predict_proba(X_test_pca)[:,1]
+
+list_aciertos_1_train=[]
+list_aciertos_0_train=[]
+list_aciertos_train=[]
+list_aciertos_1_test=[]
+list_aciertos_0_test=[]
+list_aciertos_test=[]
+list_prop=np.arange(0.5,0.95,0.02)
+for prop_ in list_prop:
+  predict_train_log_=np.where(predict_train_log>=prop_,1,0  )
+  validacion_train=pd.concat([y_train.reset_index().drop(labels="index", axis=1),pd.DataFrame({"pron":predict_train_log_})],axis=1)
+  tabla_validacion=validacion_train.value_counts()
+  aciertos_=((tabla_validacion[1][1]+tabla_validacion[0][0])/tabla_validacion.sum()  )
+  aciertos_1=tabla_validacion[1][1]/tabla_validacion[1].sum()
+  aciertos_0=tabla_validacion[0][0]/tabla_validacion[0].sum()
+  list_aciertos_train.append(aciertos_)
+  list_aciertos_1_train.append(aciertos_1)
+  list_aciertos_0_train.append(aciertos_0)
+  predict_test_log_=np.where(predict_test_log>=prop_,1,0  )
+  validacion_test=pd.concat([y_test.reset_index().drop(labels="index", axis=1),pd.DataFrame({"pron":predict_test_log_})],axis=1)
+  tabla_validacion_test=validacion_test.value_counts()
+  aciertos_1_test=tabla_validacion_test[1][1]/tabla_validacion_test[1].sum()
+  aciertos_0_test=tabla_validacion_test[0][0]/tabla_validacion_test[0].sum()
+  aciertos_test=(tabla_validacion_test[0][0]+tabla_validacion_test[1][1])/tabla_validacion_test.sum()
+  list_aciertos_test.append(aciertos_test)
+  list_aciertos_1_test.append(aciertos_1_test)
+  list_aciertos_0_test.append(aciertos_0_test)
+
+fig_ = make_subplots(rows=1, cols=2,subplot_titles =["Datos entrenamiento","Datos prueba"]
+ )
+fig_=fig_.add_trace(go.Scatter(x=list(list_prop), y=list_aciertos_train,
+                    mode='lines',
+                    name='Global'),row=1,col=1)
+                    
+fig_=fig_.add_trace(go.Scatter(x=list(list_prop), y=list_aciertos_1_train,
+                    mode='lines',
+                    name='good_status=1'),row=1,col=1)
+fig_=fig_.add_trace(go.Scatter(x=list(list_prop), y=list_aciertos_0_train,
+                    mode='lines',
+                    name='goo_status=0'),row=1,col=1)                 
+fig_=fig_.add_trace(go.Scatter(x=list(list_prop), y=list_aciertos_test,
+                    mode='lines',
+                    name='Global'),row=1,col=2)
+                    
+fig_=fig_.add_trace(go.Scatter(x=list(list_prop), y=list_aciertos_1_test,
+                    mode='lines',
+                    name='good_status=1'),row=1,col=2)
+fig_=fig_.add_trace(go.Scatter(x=list(list_prop), y=list_aciertos_0_test,
+                    mode='lines',
+                    name='goo_status=0'),row=1,col=2)                 
+#fig_.show()
+fig_.update_layout(
+    title="Modelo Logístico",
+#    xaxis_tickfont_size=dict(title="Probabilidad de partición.",
+#    titlefont_size=16,tickfont_size=14),
+    yaxis=dict(
+        title='Tasa de aciertos',
+        titlefont_size=16,
+        tickfont_size=14,
+    )
+    #,# gap between bars of the same location coordinate.
+#  height=1000, width=900
+    )
+```
+
+<figcaption>Figure 5: Tasa de aciertos para el modelo Logístico.  </figcaption>
+
+En la Figure 5 se observa que la tasa de aciertos es muy similar entre los datos de entrenamiento y los datos de prueba por lo que parece el modelo no sobre ajusta y si la proporción de partición es 0.5 se acierta cuando good_status=1, sin embargo para good_status=0 la tasa de aciertos es casi 0, si se aumenta la proporción de partición cuando good_status=0 esta aumenta mientras que cuando es 1 disminuye, si se compara la proporción de partición en 0.92 parece ser mejor el modelo de bayes, sin embargo algo importante con este modelo logístico es que cuando se tiene una proporción 0.8 la tasa de aciertos para el caso de good_status=0 es mayor que en el caso del modelo bayes y si se considera una proporción de 0.92 es un poco grande mientras que el logístico con una probabilidad más pequeña puede captar si cumple o no sus obligaciones financieras.
+
+
+Por lo anterior se trabajara con el modelo logístico con dichas covariables.
+
+
+
+
+
+
+
+# Score
+
+Con las variables seleccionadas se obta por crear un modelo con todos los datos, las variables numericas se dividen en 4 grupos (open_acc en 2 grupos) con __pd.cut__, se define un score de 300 a 850.
+
+Para las variables el nivel de refencia son:
+
+- __loan_amnt__: (9500.0, 18000.0]
+
+- __int_rate__: (5.98, 11.015]
+
+- __open_acc__: (-0.084, 42.0]
+
+- __home_ownership__: MORTGAGE
+
+- __emp_length__: 1 year
+
+```{python}
+X_model=X[var_ ].copy()
+X_model=X_model.reset_index()
+X_model=X_model.drop(labels="index", axis=1)
+# varibles continuas
+X_model["loan_amnt"]=pd.cut(X_model["loan_amnt"],4)
+X_model["int_rate"]=pd.cut(X_model["int_rate"],4)
+X_model["open_acc"]=pd.cut(X_model["open_acc"],2)
+# dummy de variables
+X_model=dummy_creation(X_model, ["loan_amnt","int_rate", "open_acc"])
+# ajuiste modelo logistico
+modelo_final = LogisticRegression()
+modelo_final.fit(X_model, Y)
+df_scorecard=pd.DataFrame({"variables_modelo":["(intercept)", *list(X_model.columns)],
+                      "Coefficients":[modelo_final.intercept_[0],*modelo_final.coef_.tolist()[0]] }) 
+df_scorecard["var_origen"]=df_scorecard["variables_modelo"].apply(lambda x: x.split(":")[0] )
+min_score = 300
+max_score = 850
+def min_temp(vector):
+    result=vector.min()
+    if result>0 :
+        result=0
+    return result
+def max_temp(vector):
+    result=vector.max()
+    if result<0:
+        result=0
+    return result
+# calculate the sum of the minimum coefficients of each category within the original feature name
+min_sum_coef = df_scorecard.groupby('var_origen')['Coefficients'].apply(min_temp).sum()+df_scorecard.loc[0,'Coefficients']
+# calculate the sum of the maximum coefficients of each category within the original feature name
+max_sum_coef = df_scorecard.groupby('var_origen')['Coefficients'].apply(max_temp).sum()#+df_scorecard.loc[0,'Coefficients']
+df_scorecard['Score - Calculation'] = df_scorecard['Coefficients'] * (max_score - min_score) / (max_sum_coef - min_sum_coef)
+# min_sum_coef = df_scorecard.groupby('var_origen')['Coefficients'].apply(min).sum()
+# update the calculated score of the Intercept
+df_scorecard.loc[0, 'Score - Calculation'] = ((df_scorecard.loc[0,'Coefficients'] - min_sum_coef) /
+                                              (max_sum_coef - min_sum_coef
+                                              )) * (max_score - min_score) + min_score
+# # round the values of the 'Score - Calculation' column and store them in a new column
+df_scorecard['Score - Final'] = df_scorecard['Score - Calculation'].round()
+
+# check the min and max possible scores of our scorecard
+min_sum_score_prel = df_scorecard.groupby('var_origen')['Score - Final'].apply(min_temp).sum()+df_scorecard.loc[0, 'Score - Final']
+max_sum_score_prel = df_scorecard.groupby('var_origen')['Score - Final'].apply(max_temp).sum()
+```
+
+
+`r kbl(py$df_scorecard, escape = F, align = "c", caption="score de cada variable",row.names=F,digits =2) %>%  kable_classic_2("striped", full_width = F)`
+
+En la Table 11 se puede observar que la población que desde el inicio del crédito al final del crédito con $\leq 12$ meses afecta negativamente al score con 171 puntos menos, si se tiene el estado de la vivienda diferente a hipoteca, afecta negativamente, si se tiene varias lineas de crédito ($\geq$ 42) afecta de manera positia, si la tasa de interes es alta afecta de manera negativa al score, si se pide un prestamo superior a 9.500 dolares afecta el score. 
+
+
+
+```{python}
+scores=np.array(df_scorecard["Score - Final"])
+scores.shape=(24,1)
+X_model_temp=pd.concat([ pd.DataFrame({"(intercept)" :list(np.repeat(1,X_model.shape[0]))} ),X_model],axis=1,ignore_index=True ).copy() 
+score_poblacional=np.matmul(np.array(X_model_temp),scores)
+score_poblacional=pd.DataFrame(np.transpose(score_poblacional).tolist()[0])
+Y=Y.reset_index()
+Y=Y.drop(labels="index",axis=1 )
+score_poblacional["good_status"]=Y
+fig = px.histogram(score_poblacional, x=0 ,color="good_status",
+                   marginal="box",  #or violin, rug
+                   hover_data=score_poblacional.columns)
+fig.show()
+#score_poblacional.to_csv("score_poblacional.csv")
+```
+
+<figcaption> Figure 6: Distribución de score | good_status. </figcaptio>
+
+
+En la Figure 6 se observa la distrubución del score para toda la población y se discrimina por good_status, se observa que aquellos usuarios con incumpliminetos financieros en promedio tienen un score menor a los que no tienen incumpliminetos financieros.
+
+
+# Conclusión
+
+
+Hay varios factores, unos más determinantes que otros, en todo el problema de riesgo de crédito.
+
+Dentro de los factores que más influyen se encuentran: la estabilidad laboral, conocida también como el tiempo que lleva cada individuo trabajando para la misma empresa. El número de líneas de crédito que tiene, que se puede interpretar como el nivel de endeudamiento del individuo. El si ha incumplido obligaciones financieras en el pasado. El número y tipo de bienes raíces que posee. También es vital la cantidad del préstamo solicitado, ya que si la cantidad es pequeña se puede ser más indulgente que en caso contrario. Otro factor importante es el interés al cual se presta, pues, a mayor interés es más poco probable que el crédito sea otorgado.

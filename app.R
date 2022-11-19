@@ -1,6 +1,3 @@
-#library(DT) # print table beutefull
-#library(sf) # manupulación geolocalizaciones
-library(tmap)  # graficos interactivos de mapas
 library(dplyr) # manejo de funciones
 library(shiny) # aplicacion
 library(plotly) # graficos 
@@ -19,7 +16,7 @@ url_github<-"https://github.com/Germanchelo13/Credit-risk-model"
 usuario<- fluidPage(
   dashboardPage(
     # header princial
-    dashboardHeader(title="modelo riesgo de \n crédito",
+    dashboardHeader(title="Riesgo de \n crédito",
                     # titleWidth = 400, 
                     tags$li(class="dropdown",
                             tags$a(href=url_github, 
@@ -104,15 +101,20 @@ output$intro_<- renderUI({
   HTML("<h2 style='text-align:center' > Introducción <h2/>
   <h5>Les brindamos esta aplicacion que 
   permite de forma agil calcular el porccentaje de riesgo y el
-  score crediticio a los usuarios del publico. común<h5/>
+  score crediticio a los usuarios del publico con respecto a información de crédito otorgado 
+  por <a href='https://www.lendingclub.com/'> lendingclub  </a>. común<h5/>
   <h2 style='text-align:center' > Objetivo <h2/>
-    <h5>Que el usuario consulte su score al cabo de 12 meses desde que solicita un crédito.<h5/>
+    <h5>Que el usuario consulte su score a futuro al cabo de 12 meses desde que 
+    solicita un crédito y según algunas caracteristicas pueda compararse frente a una población en
+    especifico.<h5/>
   <h2 style='text-align:center'> ¿A quién va dirigido? <h2/>
 <h5>  A usuarios que esten interesados en su historial crediticio.<h5>
 <h2 style='text-align:center'> Video promocional <h2/>
- <iframe width='560' height='315' style='text-align:center' 
- src='https://www.youtube.com/embed/CqstGgo_E4c'
- title='YouTube video player' frameborder='0' allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture' allowfullscreen></iframe>
+<iframe width='560' height='315'
+src='https://www.youtube.com/embed/IKFASg3vT-c'
+title='YouTube video player' frameborder='0' 
+allow='accelerometer; autoplay; clipboard-write; encrypted-media;
+gyroscope; picture-in-picture' allowfullscreen></iframe>
         <br/>   
            <b >Miembros:</b>
    <h5> &#9658 <a href='https://www.linkedin.com/in/germ%C3%A1n-alonso-pati%C3%B1o-hurtado-828783241/' target='_blank'>
@@ -130,6 +132,7 @@ output$intro_<- renderUI({
   
   
 })
+list.files()
 
 
 output$Predicion<-renderUI({
@@ -175,10 +178,10 @@ output$Predicion<-renderUI({
             open_temp
   )
   percentil_temp<-round(sum(score_datos<=score_)/length(score_datos)*100)
-  HTML(paste("El usuario que cumple con estas caracteristicas tiene un score de ",
+  HTML(paste("<h2> El usuario que cumple con estas caracteristicas tiene un score de ",
              as.character(score_),
              "Y se ubica en el ", percentil_temp,
-             " % de los mejores, esto aplica para los 2 primeros meses" 
+             " % de los mejores, esto aplica para los 12 primeros meses </h2>." 
              ,sep=" " ) )
 })
   
@@ -226,10 +229,10 @@ output$score_poblacional<- renderPlotly({
   )
   #print(score_)
 #  score_temps<-data.frame(Score=c(score_datos,100), Tipo=c(rep("Poblacion",length(score_datos)),"Usuario")  )
-  fig <- plot_ly(alpha = 0.6)
+  fig <- plot_ly(alpha = 0.6,xbins = list(size = 20))
   fig <- fig %>% add_histogram(x=~score_datos)
   fig <-fig %>%  add_lines(
-    y = c(0,12000),
+    y = c(0,50000),
     x = score_,
     line = list(
       color = "grey"
